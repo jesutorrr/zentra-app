@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,10 +31,14 @@ class HabitCard extends StatefulWidget {
 class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, DebounceMixin {
   late AnimationController _controller;
   late AnimationController _pulseController;
+  late AnimationController _bloomController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _pulseAnimation;
   final GlobalKey _checkboxKey = GlobalKey();
   bool _isTapping = false;
+  Offset? _touchLocalPosition;
+  Timer? _bloomDelayTimer;
+  bool _longPressMenuShown = false;
 
   @override
   void initState() {
@@ -46,7 +51,6 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
     
-    // Pulse animation para celebración al completar
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
@@ -55,12 +59,19 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.05), weight: 50),
       TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 50),
     ]).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+
+    _bloomController = AnimationController(
+      duration: const Duration(milliseconds: 350),
+      vsync: this,
+    );
   }
 
   @override
   void dispose() {
     _controller.dispose();
     _pulseController.dispose();
+    _bloomController.dispose();
+    _bloomDelayTimer?.cancel();
     super.dispose();
   }
 
@@ -118,6 +129,27 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
       particleCount: 14,
       size: 90,
     );
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    _longPressMenuShown = false;
+    _touchLocalPosition = event.localPosition;
+    _bloomDelayTimer?.cancel();
+    _bloomDelayTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) _bloomController.forward(from: 0);
+    });
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    _bloomDelayTimer?.cancel();
+    if (!_longPressMenuShown && _bloomController.value > 0) {
+      _bloomController.reverse();
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _bloomDelayTimer?.cancel();
+    if (_bloomController.value > 0) _bloomController.reverse();
   }
 
   // Navegar a editar usando OpenContainer callback
@@ -178,33 +210,56 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
           width: 1,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            _CategoryIcon(
-              color: categoryColor,
-              icon: categoryIcon,
-              heroTag: 'habit_icon_${widget.habit.id}',
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                _CategoryIcon(
+                  color: categoryColor,
+                  icon: categoryIcon,
+                  heroTag: 'habit_icon_${widget.habit.id}',
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _HabitInfo(
+                    habit: widget.habit,
+                    isCompleted: isCompleted,
+                    streak: streak,
+                    categoryColor: categoryColor,
+                  ),
+                ),
+                KeyedSubtree(
+                  key: _checkboxKey,
+                  child: _CompletionCheckbox(
+                    isCompleted: isCompleted,
+                    accentColor: categoryColor,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _HabitInfo(
-                habit: widget.habit,
-                isCompleted: isCompleted,
-                streak: streak,
-                categoryColor: categoryColor,
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _bloomController,
+                builder: (context, _) {
+                  if (_bloomController.value <= 0 || _touchLocalPosition == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return CustomPaint(
+                    painter: _RadialBloomPainter(
+                      center: _touchLocalPosition!,
+                      progress: _bloomController.value,
+                      color: categoryColor,
+                    ),
+                  );
+                },
               ),
             ),
-            KeyedSubtree(
-              key: _checkboxKey,
-              child: _CompletionCheckbox(
-                isCompleted: isCompleted,
-                accentColor: categoryColor,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
 
@@ -277,16 +332,29 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
                   ),
                 ],
               ),
-              child: GestureDetector(
-                onLongPress: () => _showContextMenu(context, isCompleted),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _handleTap,
-                    borderRadius: BorderRadius.circular(20),
-                    splashColor: categoryColor.withValues(alpha: 0.15),
-                    highlightColor: categoryColor.withValues(alpha: 0.08),
-                    child: cardContent,
+              child: Listener(
+                onPointerDown: _onPointerDown,
+                onPointerUp: _onPointerUp,
+                onPointerCancel: _onPointerCancel,
+                child: GestureDetector(
+                  onLongPress: () {
+                    _bloomDelayTimer?.cancel();
+                    _longPressMenuShown = true;
+                    triggerHaptic(HapticType.medium);
+                    _showContextMenu(context, isCompleted);
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) _bloomController.reverse();
+                    });
+                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _handleTap,
+                      borderRadius: BorderRadius.circular(20),
+                      splashColor: categoryColor.withValues(alpha: 0.15),
+                      highlightColor: categoryColor.withValues(alpha: 0.08),
+                      child: cardContent,
+                    ),
                   ),
                 ),
               ),
@@ -895,6 +963,52 @@ class _RingPainter extends CustomPainter {
     return oldDelegate.progress != progress ||
            oldDelegate.accentColor != accentColor ||
            oldDelegate.glowIntensity != glowIntensity;
+  }
+}
+
+/// Radial glow that expands from the touch point during long press.
+class _RadialBloomPainter extends CustomPainter {
+  final Offset center;
+  final double progress;
+  final Color color;
+
+  _RadialBloomPainter({
+    required this.center,
+    required this.progress,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxRadius = [
+      (center - Offset.zero).distance,
+      (center - Offset(size.width, 0)).distance,
+      (center - Offset(0, size.height)).distance,
+      (center - Offset(size.width, size.height)).distance,
+    ].reduce((a, b) => a > b ? a : b);
+
+    final easedProgress = Curves.easeOutCubic.transform(progress);
+    final currentRadius = maxRadius * easedProgress;
+    if (currentRadius <= 0) return;
+
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withValues(alpha: 0.22 * progress),
+          color.withValues(alpha: 0.10 * progress),
+          color.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.6, 1.0],
+      ).createShader(
+        Rect.fromCircle(center: center, radius: currentRadius),
+      );
+
+    canvas.drawCircle(center, currentRadius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_RadialBloomPainter old) {
+    return old.progress != progress || old.center != center;
   }
 }
 
