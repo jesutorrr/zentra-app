@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zentra</string>
+    <string name="progress_widget_description">Muestra tu progreso diario de hábitos</string>
+    <string name="next_habit_widget_description">Muestra y completa tu siguiente hábito</string>
+    <string name="count_widget_description">Contador de hábitos completados hoy</string>
+    <string name="quick_complete_widget_description">Completa tu siguiente hábito rápidamente</string>
+    <string name="pomodoro_widget_description">Controla tu timer Pomodoro</string>
+</resources>

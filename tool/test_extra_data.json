@@ -1,0 +1,216 @@
+{
+  "pomodoro_activities": [
+    {
+      "id": "pom_19",
+      "name": "Refactorización",
+      "startTime": "2025-12-04T09:12:00.000",
+      "endTime": "2025-12-04T11:07:00.000",
+      "cyclesCompleted": 4,
+      "totalMinutes": 100,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_17",
+      "name": "Refactorización",
+      "startTime": "2025-12-04T08:47:00.000",
+      "endTime": "2025-12-04T09:42:00.000",
+      "cyclesCompleted": 2,
+      "totalMinutes": 50,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_18",
+      "name": "Refactorización",
+      "startTime": "2025-12-04T08:14:00.000",
+      "endTime": "2025-12-04T09:39:00.000",
+      "cyclesCompleted": 3,
+      "totalMinutes": 75,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_16",
+      "name": "Revisar código",
+      "startTime": "2025-12-03T15:42:00.000",
+      "endTime": "2025-12-03T17:07:00.000",
+      "cyclesCompleted": 3,
+      "totalMinutes": 75,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_12",
+      "name": "Documentación",
+      "startTime": "2025-12-02T18:58:00.000",
+      "endTime": "2025-12-02T20:53:00.000",
+      "cyclesCompleted": 4,
+      "totalMinutes": 100,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_13",
+      "name": "Práctica de algoritmos",
+      "startTime": "2025-12-02T17:27:00.000",
+      "endTime": "2025-12-02T17:52:00.000",
+      "cyclesCompleted": 1,
+      "totalMinutes": 25,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_14",
+      "name": "Diseño de UI",
+      "startTime": "2025-12-02T12:08:00.000",
+      "endTime": "2025-12-02T12:33:00.000",
+      "cyclesCompleted": 1,
+      "totalMinutes": 25,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_15",
+      "name": "Revisar código",
+      "startTime": "2025-12-02T08:20:00.000",
+      "endTime": "2025-12-02T10:15:00.000",
+      "cyclesCompleted": 4,
+      "totalMinutes": 100,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_9",
+      "name": "Testing",
+      "startTime": "2025-12-01T16:53:00.000",
+      "endTime": "2025-12-01T17:18:00.000",
+      "cyclesCompleted": 1,
+      "totalMinutes": 25,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_11",
+      "name": "Preparar presentación",
+      "startTime": "2025-12-01T16:09:00.000",
+      "endTime": "2025-12-01T17:04:00.000",
+      "cyclesCompleted": 2,
+      "totalMinutes": 50,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_10",
+      "name": "Práctica de algoritmos",
+      "startTime": "2025-12-01T13:23:00.000",
+      "endTime": "2025-12-01T13:48:00.000",
+      "cyclesCompleted": 1,
+      "totalMinutes": 25,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_8",
+      "name": "Planificación semanal",
+      "startTime": "2025-11-30T14:01:00.000",
+      "endTime": "2025-11-30T14:56:00.000",
+      "cyclesCompleted": 2,
+      "totalMinutes": 50,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_4",
+      "name": "Documentación",
+      "startTime": "2025-11-29T15:01:00.000",
+      "endTime": "2025-11-29T15:26:00.000",
+      "cyclesCompleted": 1,
+      "totalMinutes": 25,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_6",
+      "name": "Preparar presentación",
+      "startTime": "2025-11-29T14:33:00.000",
+      "endTime": "2025-11-29T15:58:00.000",
+      "cyclesCompleted": 3,
+      "totalMinutes": 75,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_7",
+      "name": "Preparar presentación",
+      "startTime": "2025-11-29T13:20:00.000",
+      "endTime": "2025-11-29T14:15:00.000",
+      "cyclesCompleted": 2,
+      "totalMinutes": 50,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_5",
+      "name": "Estudiar Flutter",
+      "startTime": "2025-11-29T09:49:00.000",
+      "endTime": "2025-11-29T10:44:00.000",
+      "cyclesCompleted": 2,
+      "totalMinutes": 50,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_2",
+      "name": "Aprender Dart",
+      "startTime": "2025-11-28T19:41:00.000",
+      "endTime": "2025-11-28T21:06:00.000",
+      "cyclesCompleted": 3,
+      "totalMinutes": 75,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_1",
+      "name": "Práctica de algoritmos",
+      "startTime": "2025-11-28T16:48:00.000",
+      "endTime": "2025-11-28T18:13:00.000",
+      "cyclesCompleted": 3,
+      "totalMinutes": 75,
+      "isCompleted": true
+    },
+    {
+      "id": "pom_3",
+      "name": "Leer artículos técnicos",
+      "startTime": "2025-11-28T14:32:00.000",
+      "endTime": "2025-11-28T16:27:00.000",
+      "cyclesCompleted": 4,
+      "totalMinutes": 100,
+      "isCompleted": true
+    }
+  ],
+  "completed_tasks": [
+    {
+      "id": "ct_5",
+      "title": "Llamar al doctor",
+      "category": "varios",
+      "completedAt": "2025-12-02T19:43:48.687172",
+      "wasOneTime": true
+    },
+    {
+      "id": "ct_2",
+      "title": "Actualizar CV",
+      "category": "foco",
+      "completedAt": "2025-12-01T14:43:48.687172",
+      "wasOneTime": true
+    },
+    {
+      "id": "ct_4",
+      "title": "Yoga matutino",
+      "category": "movimiento",
+      "completedAt": "2025-11-29T15:43:48.687172",
+      "wasOneTime": false
+    },
+    {
+      "id": "ct_3",
+      "title": "Tomar vitaminas",
+      "category": "agua",
+      "completedAt": "2025-11-24T23:43:48.687172",
+      "wasOneTime": false
+    },
+    {
+      "id": "ct_1",
+      "title": "Preparar comida de la semana",
+      "category": "varios",
+      "completedAt": "2025-11-24T21:43:48.687172",
+      "wasOneTime": true
+    }
+  ],
+  "pomodoro_stats": {
+    "total": 46,
+    "today": 9
+  }
+}
