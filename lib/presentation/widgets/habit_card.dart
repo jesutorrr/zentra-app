@@ -102,8 +102,22 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
   }
 
   void _showCelebrationParticles() {
-    // Deshabilitado para diseño minimalista OLED
-    // El anillo que se llena es suficiente feedback visual
+    final box = _checkboxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final center = box.localToGlobal(
+      Offset(box.size.width / 2, box.size.height / 2),
+    );
+    final categoryColor = AppTheme.getCategoryColor(
+      widget.habit.category,
+      Theme.of(context).colorScheme,
+    );
+    ParticleOverlay.show(
+      context,
+      position: center,
+      color: categoryColor,
+      particleCount: 14,
+      size: 90,
+    );
   }
 
   // Navegar a editar usando OpenContainer callback
@@ -725,7 +739,7 @@ class _CompletionCheckboxState extends State<_CompletionCheckbox>
     _wasCompleted = widget.isCompleted;
     
     _fillController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 650),
       vsync: this,
     );
     
@@ -762,19 +776,39 @@ class _CompletionCheckboxState extends State<_CompletionCheckbox>
       builder: (context, child) {
         final progress = Curves.easeOutCubic.transform(_fillController.value);
         
+        final checkProgress = ((progress - 0.6) / 0.4).clamp(0.0, 1.0);
+        final checkScale = checkProgress > 0
+            ? Curves.elasticOut.transform(checkProgress)
+            : 0.0;
+
         return SizedBox(
-          width: 32,
-          height: 32,
-          child: CustomPaint(
-            painter: _RingPainter(
-              progress: progress,
-              accentColor: widget.accentColor,
-              backgroundColor: isDark
-                  ? widget.accentColor.withValues(alpha: 0.3)
-                  : colorScheme.outline.withValues(alpha: 0.3),
-              strokeWidth: 3.0,
-              glowIntensity: progress,
-            ),
+          width: 34,
+          height: 34,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(34, 34),
+                painter: _RingPainter(
+                  progress: progress,
+                  accentColor: widget.accentColor,
+                  backgroundColor: isDark
+                      ? widget.accentColor.withValues(alpha: 0.3)
+                      : colorScheme.outline.withValues(alpha: 0.3),
+                  strokeWidth: 3.0,
+                  glowIntensity: progress,
+                ),
+              ),
+              if (checkScale > 0)
+                Transform.scale(
+                  scale: checkScale,
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: checkProgress),
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -803,10 +837,7 @@ class _RingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
     
-    // Cuando está pendiente (progress == 0): solo borde gris sutil
-    // Cuando está completado: anillo iluminado con glow
     if (progress < 0.01) {
-      // Solo borde gris sutil para pendientes
       final bgPaint = Paint()
         ..color = backgroundColor
         ..style = PaintingStyle.stroke
@@ -815,27 +846,34 @@ class _RingPainter extends CustomPainter {
       
       canvas.drawCircle(center, radius, bgPaint);
     } else {
-      // Anillo iluminado para completados
+      // Solid fill inside the ring (fades in after 50% progress)
+      if (progress > 0.5) {
+        final fillAlpha = ((progress - 0.5) / 0.5).clamp(0.0, 1.0);
+        final fillPaint = Paint()
+          ..color = accentColor.withValues(alpha: fillAlpha)
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(center, radius - strokeWidth / 2, fillPaint);
+      }
       
-      // Glow effect
+      // Outer glow
       if (glowIntensity > 0.2) {
         final glowPaint = Paint()
-          ..color = accentColor.withValues(alpha: 0.4 * glowIntensity)
+          ..color = accentColor.withValues(alpha: 0.5 * glowIntensity)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeWidth + 6
+          ..strokeWidth = strokeWidth + 8
           ..strokeCap = StrokeCap.round
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8 * glowIntensity);
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * glowIntensity);
         
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: radius),
-          -1.5708, // Empieza arriba (-90 grados en radianes)
-          progress * 6.2832, // 2*PI para círculo completo
+          -1.5708,
+          progress * 6.2832,
           false,
           glowPaint,
         );
       }
       
-      // Anillo principal iluminado
+      // Ring stroke
       final progressPaint = Paint()
         ..color = accentColor
         ..style = PaintingStyle.stroke
@@ -844,8 +882,8 @@ class _RingPainter extends CustomPainter {
       
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        -1.5708, // Empieza arriba
-        progress * 6.2832, // Progreso del círculo
+        -1.5708,
+        progress * 6.2832,
         false,
         progressPaint,
       );
