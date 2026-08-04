@@ -1,0 +1,652 @@
+// lib/presentation/note_surface.dart
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../application/note_controller.dart';
+import '../application/note_state.dart';
+import '../application/session_controller.dart';
+import '../domain/markdown_document.dart';
+import '../domain/markdown_editing.dart';
+import '../domain/markdown_inline.dart';
+import '../domain/markdown_undo_history.dart';
+import '../domain/note_models.dart';
+import 'design_tokens.dart';
+import 'motion_policy.dart';
+import 'note_reminder_screen.dart';
+import 'pomodoro_screen.dart';
+import 'utils/page_transitions.dart';
+import 'widgets/note_block_editor.dart';
+import 'widgets/note_details_panel.dart';
+import 'widgets/note_format_bar.dart';
+import 'widgets/notes_components.dart';
+import 'widgets/responsive_layout.dart';
+
+/// Smallest touch target this screen hands out, in logical points.
+const double _touchTarget = 44;
+
+/// How long typing waits before it reaches disk.
+const Duration _saveDebounceDelay = Duration(milliseconds: 700);
+
+/// Width of the details column on a window wide enough to hold one.
+const double _detailsColumnWidth = 320;
+
+/// Largest scaled body size that still leaves room for a side column. Past it
+/// the details go back to the bottom sheet, where they get the full width.
+const double _sideColumnTextCeiling = 23;
+
+/// The editor's field carries one zero width sentinel in front of the block
+/// source, so a field selection sits exactly one character ahead of it.
+const int _sentinelLength = 1;
+
+/// A note, readable and writable in the same place.
+///
+/// There is no separate edit mode to enter and leave: the body is always the
+/// rendered note, and the block under the caret is the only one that turns
+/// into raw Markdown.
+class NoteSurface extends ConsumerStatefulWidget {
+  final String? noteId;
+
+  const NoteSurface({this.noteId, super.key});
+
+  @override
+  ConsumerState<NoteSurface> createState() => _NoteSurfaceState();
+}
+
+class _NoteSurfaceState extends ConsumerState<NoteSurface> {
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _tagsController = TextEditingController();
+  final FocusNode _titleFocus = FocusNode();
+  final NoteBlockEditorController _editorController =
+      NoteBlockEditorController();
+  final MarkdownUndoHistory _undo = MarkdownUndoHistory();
+
+  MarkdownDocument _document = MarkdownDocument.parse('');
+  DocumentCaret? _caret;
+  Timer? _saveDebounce;
+  Note? _note;
+  String? _ownerId;
+  String _accentKey = 'mint';
+  NoteSaveVisualState _saveState = NoteSaveVisualState.idle;
+  Future<bool>? _inFlightSave;
+  bool _initialized = false;
+  bool _writing = false;
+  bool _dirty = false;
+  bool _allowPop = false;
+  bool _detailsExpanded = true;
+  bool _h1BannerDismissed = false;
+
+  bool get _showsH1Banner =>
+      !_h1BannerDismissed &&
+      _titleController.text.trim().isEmpty &&
+      _document.blocks.isNotEmpty &&
+      _document.blocks.first.type == MarkdownBlockType.heading &&
+      _document.blocks.first.headingLevel == 1;
+
+  @override
+  void dispose() {
+    _saveDebounce?.cancel();
+    _titleController.dispose();
+    _tagsController
+      ..removeListener(_markDirty)
+      ..dispose();
+    _titleFocus.dispose();
+    _editorController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeOwnerId = ref.watch(activeOwnerIdProvider);
+    final ownerId = _ownerId ?? activeOwnerId;
+    final state = ownerId == null
+        ? null
+        : ref.watch(noteControllerProvider(ownerId)).valueOrNull;
+    if (!_initialized && ownerId != null && state != null) {
+      _initialize(ownerId, state);
+    }
+    if (!_initialized) {
+      return const Scaffold(
+        key: ValueKey('note-surface'),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final usesSideColumn = _usesSideColumn(context);
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final saved = await _saveNow();
+        if (saved) await _popWithResult();
+      },
+      child: Scaffold(
+        key: const ValueKey('note-surface'),
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Volver',
+            onPressed: _close,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          title: NoteSaveStatus(state: _saveState, onRetry: _saveNow),
+          centerTitle: false,
+          actions: [
+            IconButton(
+              key: const ValueKey('note-reminder-action'),
+              tooltip: 'Recordatorio',
+              onPressed: _openReminder,
+              icon: const Icon(Icons.notifications_none_rounded),
+            ),
+            if (!usesSideColumn)
+              IconButton(
+                key: const ValueKey('note-details-action'),
+                tooltip: 'Detalles de la nota',
+                onPressed: _openDetails,
+                icon: const Icon(Icons.tune_rounded),
+              )
+            else if (!_detailsExpanded)
+              IconButton(
+                key: const ValueKey('note-details-expand'),
+                tooltip: 'Mostrar detalles',
+                onPressed: () => setState(() => _detailsExpanded = true),
+                icon: const Icon(Icons.tune_rounded),
+              ),
+            if (_writing)
+              IconButton(
+                key: const ValueKey('note-done'),
+                tooltip: 'Listo',
+                onPressed: _stopWriting,
+                icon: const Icon(Icons.check_rounded),
+              ),
+          ],
+        ),
+        bottomNavigationBar: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: AnimatedSize(
+            key: const ValueKey('note-format-bar-slot'),
+            duration: context.motionPolicy.duration(
+              const Duration(milliseconds: 180),
+            ),
+            alignment: Alignment.topCenter,
+            child: NoteFormatBar(
+              visible: _writing,
+              activeCommand: _activeCommand,
+              onCommand: _applyCommand,
+              onBold: () => _wrap(MarkdownInlineStyle.bold),
+              onItalic: () => _wrap(MarkdownInlineStyle.italic),
+              onUndo: _undo.canUndo ? _performUndo : null,
+              onRedo: _undo.canRedo ? _performRedo : null,
+            ),
+          ),
+        ),
+        body: ResponsiveLayoutBuilder(
+          builder: (context, layout) {
+            final editor = Padding(
+              padding: EdgeInsets.fromLTRB(
+                layout.horizontalPagePadding,
+                layout.verticalPagePadding,
+                layout.horizontalPagePadding,
+                context.spacing.md,
+              ),
+              child: ResponsiveContentFrame(
+                maxWidth: 760,
+                child: _buildEditor(context),
+              ),
+            );
+            if (!usesSideColumn || !_detailsExpanded) return editor;
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: editor),
+                const VerticalDivider(width: 1),
+                SizedBox(
+                  key: const ValueKey('note-details-column'),
+                  width: _detailsColumnWidth,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          key: const ValueKey('note-details-collapse'),
+                          tooltip: 'Ocultar detalles',
+                          onPressed: () =>
+                              setState(() => _detailsExpanded = false),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                        ),
+                      ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.fromLTRB(
+                            context.spacing.md,
+                            0,
+                            context.spacing.md,
+                            context.spacing.md,
+                          ),
+                          child: _buildDetailsPanel(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditor(BuildContext context) {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: [
+        _buildTitle(context),
+        if (_showsH1Banner) _buildH1Banner(context),
+        SizedBox(height: context.spacing.sm),
+        NoteBlockEditor(
+          document: _document,
+          controller: _editorController,
+          onChanged: _onDocumentChanged,
+          onCaretChanged: _onCaretChanged,
+        ),
+      ],
+    );
+  }
+
+  /// The title is a plain heading until the note is being written, so a note
+  /// that is only being read shows no field and no caret anywhere.
+  Widget _buildTitle(BuildContext context) {
+    final style = Theme.of(context).textTheme.headlineSmall;
+    if (_writing) {
+      return TextField(
+        key: const ValueKey('note-title-field'),
+        controller: _titleController,
+        focusNode: _titleFocus,
+        style: style,
+        maxLines: null,
+        textCapitalization: TextCapitalization.sentences,
+        onChanged: (_) => _markDirty(),
+        decoration: const InputDecoration(
+          hintText: 'Título de la nota',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          contentPadding: EdgeInsets.zero,
+        ),
+      );
+    }
+    final title = _titleController.text.trim();
+    return Semantics(
+      button: true,
+      header: true,
+      label: title.isEmpty ? 'Nota sin título. Toca para escribir.' : title,
+      child: GestureDetector(
+        key: const ValueKey('note-title-heading'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _startWritingTitle,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: _touchTarget),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              title.isEmpty ? 'Nota sin título' : title,
+              style: title.isEmpty
+                  ? style?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )
+                  : style,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildH1Banner(BuildContext context) {
+    final buttonStyle = TextButton.styleFrom(
+      minimumSize: const Size(64, _touchTarget),
+    );
+    return Card(
+      key: const ValueKey('note-h1-banner'),
+      child: Padding(
+        padding: EdgeInsets.all(context.spacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Esta nota empieza con un encabezado.'),
+            SizedBox(height: context.spacing.xs),
+            Wrap(
+              spacing: context.spacing.xs,
+              children: [
+                TextButton(
+                  style: buttonStyle,
+                  onPressed: _useH1AsTitle,
+                  child: const Text('Usar como título'),
+                ),
+                TextButton(
+                  style: buttonStyle,
+                  onPressed: () => setState(() => _h1BannerDismissed = true),
+                  child: const Text('Descartar'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The details only become a column when the window is wide enough and the
+  /// reader's text is small enough for two columns to still be readable.
+  bool _usesSideColumn(BuildContext context) =>
+      ZentraBreakpoints.windowClassFor(MediaQuery.sizeOf(context).width)
+          .isAtLeastExpanded &&
+      MediaQuery.textScalerOf(context).scale(16) <= _sideColumnTextCeiling;
+
+  /// [onRefresh] repaints a host that owns its own element tree, such as the
+  /// bottom sheet, which this state cannot rebuild on its own.
+  Widget _buildDetailsPanel({VoidCallback? onRefresh}) => NoteDetailsPanel(
+        onReminder: _openReminder,
+        tagsController: _tagsController,
+        accentKey: _accentKey,
+        onAccentChanged: (value) {
+          setState(() => _accentKey = value);
+          _markDirty();
+          onRefresh?.call();
+        },
+        onFocus: _note == null ? null : _startFocus,
+        isPinned: _note?.isPinned ?? false,
+        onTogglePin: _note == null
+            ? null
+            : () async {
+                await _togglePin();
+                onRefresh?.call();
+              },
+      );
+
+  NoteBlockCommand? get _activeCommand {
+    final caret = _caret;
+    if (caret == null || caret.blockIndex >= _document.blocks.length) {
+      return null;
+    }
+    return activeCommandFor(_document.blocks[caret.blockIndex]);
+  }
+
+  void _initialize(String ownerId, NoteState state) {
+    _initialized = true;
+    _ownerId = ownerId;
+    final noteId = widget.noteId;
+    if (noteId != null) {
+      final note = state.getNote(noteId);
+      if (note != null) {
+        _note = note;
+        _titleController.text = note.title;
+        _tagsController.text = note.tags.join(', ');
+        _accentKey = note.accentKey;
+        _document = MarkdownDocument.parse(note.body);
+      }
+    }
+    // Attached after the seed values land, so restoring a note is not mistaken
+    // for the reader editing it.
+    _tagsController.addListener(_markDirty);
+    _undo.record(_document.serialize());
+    if (_note == null) {
+      _writing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _titleFocus.requestFocus();
+      });
+    }
+  }
+
+  void _onDocumentChanged(MarkdownDocument document) {
+    _undo.record(_document.serialize());
+    // Checking a box is a deliberate act with no follow up typing, and it is
+    // often the last thing done before closing the note, so it skips the
+    // debounce and lands on disk right away.
+    final tickedBox = document.checkedCount != _document.checkedCount &&
+        document.checkItemCount == _document.checkItemCount;
+    setState(() => _document = document);
+    if (tickedBox) {
+      _saveDebounce?.cancel();
+      setState(() {
+        _dirty = true;
+        _saveState = NoteSaveVisualState.saving;
+      });
+      unawaited(_saveNow());
+      return;
+    }
+    _markDirty();
+  }
+
+  void _onCaretChanged(DocumentCaret? caret) {
+    final movedBlock = caret?.blockIndex != _caret?.blockIndex;
+    setState(() {
+      _caret = caret;
+      _writing = caret != null || _writing;
+    });
+    // The editor has already written the block being left into the document,
+    // so this saves the finished block instead of waiting out the debounce.
+    if (movedBlock && _dirty) unawaited(_saveNow());
+  }
+
+  void _markDirty() {
+    if (!_initialized) return;
+    _saveDebounce?.cancel();
+    setState(() {
+      _dirty = true;
+      _saveState = NoteSaveVisualState.saving;
+    });
+    _saveDebounce = Timer(_saveDebounceDelay, _saveNow);
+  }
+
+  void _applyCommand(NoteBlockCommand command) {
+    final caret = _caret;
+    if (caret == null) return;
+    final edit = applyBlockCommand(_document, caret, command);
+    _onDocumentChanged(edit.document);
+    _editorController.focusBlock(
+      edit.caret.blockIndex,
+      offset: edit.caret.offset,
+    );
+  }
+
+  void _wrap(MarkdownInlineStyle style) {
+    final caret = _caret;
+    final selection = _editorController.selection;
+    if (caret == null || selection == null || selection.isCollapsed) return;
+    final edit = wrapSelection(
+      _document,
+      caret.blockIndex,
+      selection.start - _sentinelLength,
+      selection.end - _sentinelLength,
+      style,
+    );
+    _onDocumentChanged(edit.document);
+    _editorController.focusBlock(
+      edit.caret.blockIndex,
+      offset: edit.caret.offset,
+    );
+  }
+
+  void _performUndo() {
+    final restored = _undo.undo(_document.serialize());
+    if (restored == null) return;
+    setState(() => _document = MarkdownDocument.parse(restored));
+    _markDirty();
+  }
+
+  void _performRedo() {
+    final restored = _undo.redo();
+    if (restored == null) return;
+    setState(() => _document = MarkdownDocument.parse(restored));
+    _markDirty();
+  }
+
+  void _useH1AsTitle() {
+    final first = _document.blocks.first;
+    setState(() {
+      _titleController.text = first.text;
+      _document = _document.removeBlock(0);
+      _h1BannerDismissed = true;
+    });
+    _markDirty();
+  }
+
+  void _startWritingTitle() {
+    setState(() => _writing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _titleFocus.requestFocus();
+    });
+  }
+
+  void _stopWriting() {
+    FocusScope.of(context).unfocus();
+    setState(() => _writing = false);
+    unawaited(_saveNow());
+  }
+
+  /// Saves, queueing behind any write already on its way to disk.
+  ///
+  /// This screen writes far more often than a debounce alone would, so turning
+  /// a caller away while another write is in flight would leave the reader
+  /// pressing Back on a screen that refuses to close.
+  Future<bool> _saveNow() async {
+    final pending = _inFlightSave;
+    if (pending != null) await pending;
+    final write = _write();
+    _inFlightSave = write;
+    try {
+      return await write;
+    } finally {
+      if (identical(_inFlightSave, write)) _inFlightSave = null;
+    }
+  }
+
+  Future<bool> _write() async {
+    if (!mounted) return false;
+    if (!_dirty && _note != null) return true;
+    final ownerId = _ownerId;
+    if (ownerId == null) return false;
+    final title = _titleController.text.trim();
+    final body = _document.serialize();
+    if (_note == null && title.isEmpty && body.trim().isEmpty) {
+      setState(() {
+        _dirty = false;
+        _saveState = NoteSaveVisualState.idle;
+      });
+      return true;
+    }
+    _saveDebounce?.cancel();
+    setState(() => _saveState = NoteSaveVisualState.saving);
+    final controller = ref.read(noteControllerProvider(ownerId).notifier);
+    final tags = _tagsController.text
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    try {
+      if (_note == null) {
+        _note = await controller.createNote(
+          title: title,
+          body: body,
+          tags: tags,
+          accentKey: _accentKey,
+        );
+      } else {
+        final updated = _note!.copyWith(
+          title: title,
+          body: body,
+          tags: tags,
+          accentKey: _accentKey,
+          updatedAt: DateTime.now().toUtc(),
+        );
+        await controller.saveNote(updated);
+        _note = updated;
+      }
+      if (!mounted) return true;
+      setState(() {
+        _dirty = false;
+        _saveState = NoteSaveVisualState.saved;
+      });
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+      setState(() => _saveState = NoteSaveVisualState.error);
+      return false;
+    }
+  }
+
+  Future<void> _openDetails() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              context.spacing.md,
+              0,
+              context.spacing.md,
+              context.spacing.md,
+            ),
+            child: _buildDetailsPanel(
+              onRefresh: () => setSheetState(() {}),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openReminder() async {
+    final saved = await _saveNow();
+    final note = _note;
+    if (!saved || note == null || !mounted) return;
+    await Navigator.of(context).push(
+      PageTransitions.slideFromRight(NoteReminderScreen(noteId: note.id)),
+    );
+  }
+
+  Future<void> _startFocus() async {
+    final note = _note;
+    final ownerId = _ownerId;
+    if (note == null || ownerId == null) return;
+    ref.read(noteControllerProvider(ownerId).notifier).selectNote(note.id);
+    await Navigator.of(context).push(
+      PageTransitions.slideFromRight(
+        PomodoroScreen(initialTitle: note.title, linkedNoteId: note.id),
+      ),
+    );
+  }
+
+  Future<void> _togglePin() async {
+    final note = _note;
+    final ownerId = _ownerId;
+    if (note == null || ownerId == null) return;
+    await ref.read(noteControllerProvider(ownerId).notifier).togglePin(note.id);
+    if (!mounted) return;
+    setState(() => _note = note.copyWith(isPinned: !note.isPinned));
+  }
+
+  Future<void> _close() async {
+    final saved = await _saveNow();
+    if (saved) await _popWithResult();
+  }
+
+  Future<void> _popWithResult() async {
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop(_note?.id);
+  }
+}
