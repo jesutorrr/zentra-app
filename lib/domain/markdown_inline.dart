@@ -119,8 +119,12 @@ List<MarkdownInlineSegment> _tokenize(
     bufferStart = end;
   }
 
-  void addMarker(int at, int to, Set<MarkdownInlineStyle> styles,
-      [String? markerHref]) {
+  void addMarker(
+    int at,
+    int to,
+    Set<MarkdownInlineStyle> styles, [
+    String? markerHref,
+  ]) {
     segments.add(
       MarkdownInlineSegment(
         start: base + at,

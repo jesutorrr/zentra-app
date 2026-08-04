@@ -91,8 +91,10 @@ void main() {
   });
 
   test('an empty note still has one editable block', () {
-    expect(MarkdownDocument.parse('').blocks.single.type,
-        MarkdownBlockType.paragraph);
+    expect(
+      MarkdownDocument.parse('').blocks.single.type,
+      MarkdownBlockType.paragraph,
+    );
   });
 
   test('computes indent level with a ceiling of three', () {
@@ -100,6 +102,8 @@ void main() {
     expect(MarkdownDocument.parse('  - a').blocks.single.indentLevel, 1);
     expect(MarkdownDocument.parse('\t- a').blocks.single.indentLevel, 1);
     expect(
-        MarkdownDocument.parse('            - a').blocks.single.indentLevel, 3);
+      MarkdownDocument.parse('            - a').blocks.single.indentLevel,
+      3,
+    );
   });
 }

@@ -45,10 +45,16 @@ void expectTotalCoverage(String input) {
   var cursor = 0;
   for (final segment in segments) {
     expect(segment.start, cursor, reason: 'gap or overlap in "$input"');
-    expect(segment.end - segment.start, segment.text.length,
-        reason: 'length mismatch in "$input"');
-    expect(input.substring(segment.start, segment.end), segment.text,
-        reason: 'offsets do not point at the text in "$input"');
+    expect(
+      segment.end - segment.start,
+      segment.text.length,
+      reason: 'length mismatch in "$input"',
+    );
+    expect(
+      input.substring(segment.start, segment.end),
+      segment.text,
+      reason: 'offsets do not point at the text in "$input"',
+    );
     cursor = segment.end;
   }
   expect(cursor, input.length, reason: 'tail left uncovered in "$input"');
@@ -134,7 +140,7 @@ void main() {
   });
 
   test('a closer swallowed by a link never opens a run', () {
-    final input = 'Nota_ importante, ver [doc](https://ej.com/guia_final)';
+    const input = 'Nota_ importante, ver [doc](https://ej.com/guia_final)';
     final segments = tokenizeInline(input);
     expect(
       segments.where((s) => s.styles.contains(MarkdownInlineStyle.italic)),
