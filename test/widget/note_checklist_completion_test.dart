@@ -109,6 +109,28 @@ void main() {
     expect(find.byKey(_message), findsNothing);
   });
 
+  // Undoing the tick undoes what the message is claiming, so the message has to
+  // go with it.
+  testWidgets('undoing the last tick takes the message down', (tester) async {
+    final harness = await createHarness('- [ ] uno');
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-block-checkbox')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_message), findsOneWidget);
+
+    // The bar only appears once the note is being written in.
+    await tester.tap(find.byKey(const ValueKey('note-block-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('note-format-undo')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(_message), findsNothing);
+  });
+
   // A screen reader has to hear the confirmation where it stands, without the
   // caret being pulled out of the note to read it.
   testWidgets('announces itself without taking focus', (tester) async {

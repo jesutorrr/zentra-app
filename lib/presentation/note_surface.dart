@@ -632,15 +632,23 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   void _performUndo() {
     final restored = _undo.undo(_document.serialize());
     if (restored == null) return;
-    setState(() => _document = MarkdownDocument.parse(restored));
+    setState(() => _replaceDocument(MarkdownDocument.parse(restored)));
     _markDirty();
   }
 
   void _performRedo() {
     final restored = _undo.redo();
     if (restored == null) return;
-    setState(() => _document = MarkdownDocument.parse(restored));
+    setState(() => _replaceDocument(MarkdownDocument.parse(restored)));
     _markDirty();
+  }
+
+  /// Swaps the document wholesale, for the paths that restore a body instead of
+  /// editing one. Undoing the tick that finished a checklist has to take the
+  /// confirmation down with it. Only call inside a [setState].
+  void _replaceDocument(MarkdownDocument document) {
+    _document = document;
+    _showsChecklistComplete = _confirmsChecklist(document, false);
   }
 
   void _useH1AsTitle() {
@@ -692,7 +700,7 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   /// did not mean to make is one undo away.
   void _leaveRawMode() {
     _undo.record(_document.serialize());
-    _document = MarkdownDocument.parse(_rawController.text);
+    _replaceDocument(MarkdownDocument.parse(_rawController.text));
     _rawMode = false;
   }
 
