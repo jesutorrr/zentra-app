@@ -874,6 +874,26 @@ git add lib/domain/markdown_inline.dart test/unit/markdown_inline_test.dart
 git commit -m "feat(notas): tokenizador inline con posiciones de origen"
 ```
 
+**Enmienda posterior a la revisión.** El código de arriba cubría el texto
+completo pero estilizaba mal. La versión que quedó en `lib/domain/markdown_inline.dart`
+mantiene la misma interfaz y agrega estas reglas, que las Tareas 8 y 11 deben
+respetar:
+
+- El contenido de un span de código es literal y se emite entero, así que
+  `` `a*b*c` `` conserva sus asteriscos en modo lectura.
+- Los enlaces se localizan de una sola pasada con `allMatches`. Esto evita el
+  costo cuadrático en una línea llena de corchetes sin cerrar y, sobre todo,
+  impide que un delimitador cierre dentro de una URL: antes
+  `Nota_ ... [doc](.../guia_final)` dejaba la línea en cursiva.
+- Reglas de flanqueo: un marcador no abre contra un espacio ni cierra después
+  de uno, y los guiones bajos además no abren ni cierran pegados a una letra o
+  dígito. Sin esto `reporte_final_v2.md` y `2 * 3 * 4` salían con formato.
+- `\*` es un escape: la diagonal se emite como marcador oculto y el símbolo
+  queda como contenido.
+- La etiqueta de un enlace se tokeniza en recursión, así que
+  `[la guía **oficial**](url)` no muestra asteriscos sueltos en lectura.
+- `MarkdownInlineSegment` tiene `==`, `hashCode` y `toString`.
+
 ---
 
 ## Task 4: Transformaciones de teclado
