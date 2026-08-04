@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../domain/markdown_document.dart';
 import '../../domain/markdown_editing.dart';
 import '../design_tokens.dart';
+import 'markdown_highlight_controller.dart';
 import 'note_block_view.dart';
 
 /// Zero width space kept in front of the active field's text.
@@ -59,7 +60,10 @@ class NoteBlockEditor extends StatefulWidget {
 }
 
 class _NoteBlockEditorState extends State<NoteBlockEditor> {
-  final TextEditingController _fieldController = TextEditingController();
+  /// Transparent until the first build: `_buildField` assigns the themed
+  /// colour before the field that paints with it exists.
+  final MarkdownHighlightController _fieldController =
+      MarkdownHighlightController(markerColor: Colors.transparent);
   final FocusNode _focusNode = FocusNode();
 
   int? _activeIndex;
@@ -182,6 +186,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   Widget _buildField(BuildContext context, MarkdownBlock block) {
     final colorScheme = Theme.of(context).colorScheme;
     final style = noteBlockTextStyle(context, block);
+    _fieldController.markerColor = colorScheme.onSurfaceVariant;
     return Padding(
       key: const ValueKey('note-active-block'),
       padding: EdgeInsets.only(
