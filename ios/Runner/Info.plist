@@ -18,6 +18,17 @@
 	<string>Zentra</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.jesutorr.appzentra</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
@@ -27,17 +38,30 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Zentra necesita acceso a tu biblioteca de fotos para personalizar tu perfil.</string>
-	<key>NSSiriUsageDescription</key>
-	<string>Usa Siri para completar hábitos, iniciar pomodoros y ver tu progreso.</string>
+	<string>Zentra solo accederá a tu biblioteca si eliges desde ella un archivo compatible al restaurar tus datos.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>com.zentra.app.completeHabit</string>
-		<string>com.zentra.app.startPomodoro</string>
-		<string>com.zentra.app.viewProgress</string>
-	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIApplicationShortcutItems</key>
 	<array>
 		<dict>
@@ -47,6 +71,14 @@
 			<string>Nuevo hábito</string>
 			<key>UIApplicationShortcutItemType</key>
 			<string>NewHabitAction</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeCompose</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Nueva nota</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>NewNoteAction</string>
 		</dict>
 		<dict>
 			<key>UIApplicationShortcutItemIconType</key>
