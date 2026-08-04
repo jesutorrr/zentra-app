@@ -471,6 +471,25 @@ void main() {
     expect('- hola mundo'.substring(selection.start, selection.end), 'hola');
   });
 
+  // And the way back in, for the screen handing a domain range over after a
+  // wrap: the sentinel has to be added on exactly as it is stripped off.
+  testWidgets('focusing a range selects the source characters it names', (
+    tester,
+  ) async {
+    document = MarkdownDocument.parse('- hola mundo');
+    await tester.pumpWidget(host());
+    controller.focusBlockSelection(0, start: 2, end: 6);
+    await tester.pumpAndSettle();
+
+    final field = fieldOf(tester);
+    expect(
+      field.text.substring(field.selection.start, field.selection.end),
+      'hola',
+    );
+    expect(controller.sourceSelection!.start, 2);
+    expect(controller.sourceSelection!.end, 6);
+  });
+
   // Every source line of a fence lives in one block, so a single line field
   // would strip the newlines on the first keystroke and leave an open fence
   // swallowing everything under it.

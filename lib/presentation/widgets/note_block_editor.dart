@@ -35,7 +35,21 @@ class NoteBlockEditorController extends ChangeNotifier {
   /// caller usually hands a new document to the parent in the same turn and
   /// the editor is still holding the previous one.
   void focusBlock(int index, {int offset = 0}) {
-    _state?._requestFocusBlock(index, offset);
+    focusBlockSelection(index, start: offset, end: offset);
+  }
+
+  /// Selects `[start, end)` of [index], deferred and for the same reason as
+  /// [focusBlock].
+  ///
+  /// Both offsets are measured on the block's source line, exactly as
+  /// [sourceSelection] reports them: the sentinel is this widget's business
+  /// and no caller should be shifting offsets past it by hand.
+  void focusBlockSelection(
+    int index, {
+    required int start,
+    required int end,
+  }) {
+    _state?._requestFocusBlock(index, start, end);
   }
 
   void _caretMoved() => notifyListeners();
@@ -94,7 +108,8 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   MarkdownDocument? _boundDocument;
 
   int? _pendingFocusIndex;
-  int _pendingFocusOffset = 0;
+  int _pendingFocusStart = 0;
+  int _pendingFocusEnd = 0;
 
   DocumentCaret? get _caret {
     final index = _activeIndex;
@@ -151,11 +166,8 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     // coming back around. Rebinding there cancels the composition, and every
     // IME answers that by re-committing what it had, duplicating characters.
     if (_differsOnlyWhileComposing('$_sentinel$source')) return;
-    _bindTo(
-      widget.document,
-      index,
-      _sourceOffset(_fieldController.selection.baseOffset),
-    );
+    final offset = _sourceOffset(_fieldController.selection.baseOffset);
+    _bindTo(widget.document, index, start: offset, end: offset);
   }
 
   @override
@@ -202,7 +214,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
                 : null,
             onTapAtOffset: widget.readOnly
                 ? null
-                : (offset) => _activate(index, offset: offset),
+                : (offset) => _activate(index, start: offset, end: offset),
           ),
         ),
       );
@@ -319,28 +331,29 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     return KeyEventResult.ignored;
   }
 
-  /// Puts the caret on [index], committing the block being left first.
-  void _activate(int index, {int offset = 0}) {
+  /// Selects `[start, end)` of [index], committing the block being left first.
+  void _activate(int index, {required int start, required int end}) {
     if (widget.readOnly) return;
     // Only when the field is moving elsewhere: on the same block the document
     // is the newer of the two, since a toolbar command has just rewritten it.
     final document =
         (index == _activeIndex ? null : _commitField()) ?? widget.document;
     if (document.blocks.isEmpty) return;
-    _bindTo(document, index, offset);
+    _bindTo(document, index, start: start, end: end);
     _focusNode.requestFocus();
     _publishCaret(_caret);
   }
 
-  void _requestFocusBlock(int index, int offset) {
+  void _requestFocusBlock(int index, int start, int end) {
     _pendingFocusIndex = index;
-    _pendingFocusOffset = offset;
+    _pendingFocusStart = start;
+    _pendingFocusEnd = end;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final target = _pendingFocusIndex;
       if (target == null) return;
       _pendingFocusIndex = null;
-      _activate(target, offset: _pendingFocusOffset);
+      _activate(target, start: _pendingFocusStart, end: _pendingFocusEnd);
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
@@ -425,7 +438,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
         : _sourceOffset(selection.baseOffset);
     _setFieldValue(
       '$_sentinel$source',
-      _sentinel.length + _clamp(offset, source.length),
+      TextSelection.collapsed(offset: _fieldOffset(offset, source)),
     );
     _commitField();
     _publishCaret(_caret);
@@ -439,7 +452,12 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     final text = _fieldController.text;
     final start = _clamp(selection.start, text.length);
     final end = _clamp(selection.end, text.length);
-    _setFieldValue(text.replaceRange(start, end, '\n'), start + 1);
+    // Field offsets throughout: the replacement is measured on what the field
+    // holds, sentinel included, not on the block source.
+    _setFieldValue(
+      text.replaceRange(start, end, '\n'),
+      TextSelection.collapsed(offset: start + 1),
+    );
     _commitField();
     _publishCaret(_caret);
   }
@@ -469,7 +487,8 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
       // A multi line paste became several blocks. The caret follows the text
       // so none of it is left stranded behind an inert field.
       final last = index + blocks.length - 1;
-      _bindTo(next, last, next.blocks[last].toSourceLine().length);
+      final end = next.blocks[last].toSourceLine().length;
+      _bindTo(next, last, start: end, end: end);
     }
     return next;
   }
@@ -502,15 +521,25 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   /// asked for, on the document it produced rather than on the one the parent
   /// will hand back a frame later.
   void _applyEdit(MarkdownDocument previous, DocumentEdit edit) {
-    _bindTo(edit.document, edit.caret.blockIndex, edit.caret.offset);
+    _bindTo(
+      edit.document,
+      edit.caret.blockIndex,
+      start: edit.caret.offset,
+      end: edit.caret.offset,
+    );
     if (!identical(edit.document, previous)) widget.onChanged(edit.document);
     _focusNode.requestFocus();
     _publishCaret(_caret);
   }
 
-  /// Points the field at [index] of [document], with [offset] measured on the
-  /// block source rather than on the field.
-  void _bindTo(MarkdownDocument document, int index, int offset) {
+  /// Points the field at [index] of [document] and selects `[start, end)`,
+  /// with both offsets measured on the block source rather than on the field.
+  void _bindTo(
+    MarkdownDocument document,
+    int index, {
+    required int start,
+    required int end,
+  }) {
     if (document.blocks.isEmpty) return;
     final target = _clamp(index, document.blocks.length - 1);
     final source = document.blocks[target].toSourceLine();
@@ -523,20 +552,26 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     setState(() => _activeIndex = target);
     _setFieldValue(
       text,
-      _sentinel.length + _clamp(offset, source.length),
+      TextSelection(
+        baseOffset: _fieldOffset(start, source),
+        extentOffset: _fieldOffset(end, source),
+      ),
       composing: composing,
     );
   }
 
   void _setFieldValue(
     String text,
-    int offset, {
+    TextSelection selection, {
     TextRange composing = TextRange.empty,
   }) {
     _applyingRemoteChange = true;
     _fieldController.value = TextEditingValue(
       text: text,
-      selection: TextSelection.collapsed(offset: _clamp(offset, text.length)),
+      selection: TextSelection(
+        baseOffset: _clamp(selection.baseOffset, text.length),
+        extentOffset: _clamp(selection.extentOffset, text.length),
+      ),
       composing: composing,
     );
     _applyingRemoteChange = false;
@@ -596,6 +631,12 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     if (!text.startsWith(_sentinel)) return at;
     return at <= _sentinel.length ? 0 : at - _sentinel.length;
   }
+
+  /// Translates an offset on [source] into one on the field that will hold it,
+  /// the inverse of [_sourceOffset]. Every field this widget writes is armed
+  /// with the sentinel, so there is no unarmed case to answer for here.
+  static int _fieldOffset(int sourceOffset, String source) =>
+      _sentinel.length + _clamp(sourceOffset, source.length);
 
   static int _clamp(int value, int maximum) {
     if (value < 0) return 0;
