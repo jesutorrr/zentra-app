@@ -192,6 +192,10 @@ void main() {
       await _reviewHabitFormScope(review, dependencies);
       return;
     }
+    if (reviewScope == 'notes') {
+      await _reviewNotesScope(review, dependencies);
+      return;
+    }
 
     await _reviewEntryJourney(review, dependencies);
     await _reviewAuthenticatedJourney(review, dependencies);
@@ -402,6 +406,118 @@ Future<void> _reviewHabitFormScope(
   await review.tap(find.byKey(const ValueKey('habit-more-menu')));
   expect(find.text('Eliminar'), findsOneWidget);
   await review.capture('07-habit-form-editing-menu');
+}
+
+Future<void> _reviewNotesScope(
+  _ScreenReviewSession review,
+  _ReviewHarness dependencies,
+) async {
+  await dependencies.seedAuthenticatedData();
+
+  Future<void> showLibrary({ThemeMode themeMode = ThemeMode.light}) {
+    return review.show(
+      dependencies.buildApp(home: const NotesScreen(), themeMode: themeMode),
+      expected: find.byType(NotesScreen),
+    );
+  }
+
+  /// Opens the seeded note from the library.
+  ///
+  /// A window wide enough for list and detail keeps the library on screen and
+  /// only selects the card, so the surface is one more tap away there.
+  Future<void> openNote() async {
+    await review.tap(
+      find.byKey(const ValueKey('note-card-review-note-algebra')),
+    );
+    if (find.byType(NoteSurface).evaluate().isEmpty) {
+      await review.tap(find.byTooltip('Editar nota'));
+    }
+    expect(find.byType(NoteSurface), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-surface')), findsOneWidget);
+  }
+
+  Finder checkboxOf(int blockIndex) => find.descendant(
+        of: find.byKey(ValueKey('note-block-$blockIndex')),
+        matching: find.byKey(const ValueKey('note-block-checkbox')),
+      );
+
+  await showLibrary();
+  expect(find.byKey(const ValueKey('notes-tag-filter')), findsOneWidget);
+  expect(find.text('Repasar Álgebra lineal'), findsWidgets);
+  await review.capture('00-notes-library-light');
+
+  await review.tap(
+    find.byKey(const ValueKey('notes-tag-filter-producto')),
+  );
+  expect(find.text('Ideas para Zentra'), findsWidgets);
+  expect(find.text('Repasar Álgebra lineal'), findsNothing);
+  await review.capture('01-notes-tag-filter-light');
+  await review.tap(find.byKey(const ValueKey('notes-tag-filter-all')));
+
+  final search = find.byKey(const ValueKey('notes-search'));
+  await review.tap(search);
+  await review.tester.enterText(search, 'vectoriales');
+  FocusManager.instance.primaryFocus?.unfocus();
+  await review.waitForUi(const Duration(milliseconds: 300));
+  expect(find.text('Repasar Álgebra lineal'), findsWidgets);
+  expect(find.text('Ideas para Zentra'), findsNothing);
+  await review.capture('02-notes-search-light');
+  await review.tap(find.byTooltip('Limpiar búsqueda'));
+
+  await openNote();
+  // Reading: no field, no caret and no bar anywhere on the note.
+  expect(find.byKey(const ValueKey('note-title-heading')), findsOneWidget);
+  expect(find.byKey(const ValueKey('note-active-block')), findsNothing);
+  expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
+  await review.capture('03-note-surface-reading-light');
+
+  await review.tap(find.byKey(const ValueKey('note-block-0')));
+  expect(find.byKey(const ValueKey('note-active-block')), findsOneWidget);
+  expect(find.byKey(const ValueKey('note-format-bar')), findsOneWidget);
+  await review.capture('04-note-surface-writing-light');
+  await review.tap(find.byKey(const ValueKey('note-done')));
+  expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
+
+  // The details reach the reader through the shape the window allows: a sheet
+  // on a phone, a column that can be folded away on a wide window.
+  final usesSideColumn =
+      find.byKey(const ValueKey('note-details-column')).evaluate().isNotEmpty;
+  if (usesSideColumn) {
+    expect(find.byKey(const ValueKey('note-details-action')), findsNothing);
+    await review.tap(find.byKey(const ValueKey('note-details-collapse')));
+    expect(find.byKey(const ValueKey('note-details-column')), findsNothing);
+    await review.capture('05-note-details-light');
+    await review.tap(find.byKey(const ValueKey('note-details-expand')));
+  } else {
+    await review.tap(find.byKey(const ValueKey('note-details-action')));
+    expect(find.text('Volver con intención'), findsOneWidget);
+    await review.capture('05-note-details-light');
+    await review.backTo<NoteSurface>();
+  }
+
+  for (final block in _pendingCheckBlocks) {
+    await review.tap(checkboxOf(block));
+  }
+  expect(find.byKey(const ValueKey('note-checklist-complete')), findsOneWidget);
+  await review.capture('06-note-checklist-complete-light');
+  // Put the note back the way it was seeded so the AMOLED pass shows the same
+  // half finished checklist instead of a note that is already done.
+  for (final block in _pendingCheckBlocks) {
+    await review.tap(checkboxOf(block));
+  }
+  expect(find.byKey(const ValueKey('note-checklist-complete')), findsNothing);
+  await review.backTo<NotesScreen>();
+
+  await showLibrary(themeMode: ThemeMode.dark);
+  await review.capture('07-notes-library-amoled');
+
+  await openNote();
+  expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
+  await review.capture('08-note-surface-reading-amoled');
+
+  await review.tap(find.byKey(const ValueKey('note-block-0')));
+  expect(find.byKey(const ValueKey('note-format-bar')), findsOneWidget);
+  await review.capture('09-note-surface-writing-amoled');
 }
 
 Future<void> _reviewEntryScope(
@@ -718,7 +834,14 @@ Future<void> _reviewAuthenticatedJourney(
     await review.tap(find.byTooltip('Editar nota'));
   }
   expect(find.byType(NoteSurface), findsOneWidget);
-  await review.capture('14-note-editor');
+  expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
+  await review.capture('14-note-surface-reading');
+
+  await review.tap(find.byKey(const ValueKey('note-block-0')));
+  expect(find.byKey(const ValueKey('note-active-block')), findsOneWidget);
+  expect(find.byKey(const ValueKey('note-format-bar')), findsOneWidget);
+  await review.capture('14-note-surface-writing');
+  await review.tap(find.byKey(const ValueKey('note-done')));
 
   await review.tap(find.byKey(const ValueKey('note-reminder-action')));
   expect(find.byType(NoteReminderScreen), findsOneWidget);
@@ -980,6 +1103,24 @@ class _ScreenReviewSession {
   }
 }
 
+/// Body of the note the review opens.
+///
+/// It carries one of every block the surface has to render, so a capture shows
+/// whether headings, emphasis, checklists and quotes survive the round trip
+/// instead of only proving that a paragraph fits on screen.
+const String _algebraBody = '# Repaso de la semana\n'
+    '\n'
+    'Transformaciones, matrices y espacios **vectoriales**.\n'
+    '\n'
+    '- [x] Releer el capítulo 3\n'
+    '- [ ] Resolver los ejercicios impares\n'
+    '- [ ] Preparar el resumen de valores propios\n'
+    '\n'
+    '> Una base ordena el espacio; la matriz sólo lo describe.';
+
+/// Index of the two checklist blocks that start unticked in [_algebraBody].
+const List<int> _pendingCheckBlocks = [5, 6];
+
 class _ReviewHarness {
   static const ownerId = 'screen-reviewer';
 
@@ -1169,7 +1310,7 @@ class _ReviewHarness {
       id: 'review-note-algebra',
       userId: ownerId,
       title: 'Repasar Álgebra lineal',
-      body: 'Transformaciones, matrices y espacios vectoriales.',
+      body: _algebraBody,
       createdAt: now.subtract(const Duration(days: 2)),
       updatedAt: now.subtract(const Duration(hours: 2)),
       category: 'Estudio',

@@ -1,0 +1,399 @@
+# Zentra Salvia: seguimiento de pantallas
+
+Actualizado: 4 de agosto de 2026
+
+Este documento es el tablero operativo del revamp Salvia. La estrategia general
+de seguridad, accesibilidad y minimalismo vive en
+[`zentra-security-and-minimal-revamp-plan.md`](zentra-security-and-minimal-revamp-plan.md).
+Aquí se registra qué pantalla está activa, qué falta y qué evidencia necesita
+antes de considerarse terminada.
+
+## Estados
+
+- `Aprobada`: implementada, con validación técnica incremental y aprobación
+  estética de Uri.
+- `Activa`: contrato visual aprobado y plan listo para implementarse.
+- `Pendiente`: todavía conserva su diseño anterior o no ha recibido revisión
+  Salvia.
+- `Bloqueada`: necesita una decisión o una dependencia antes de avanzar.
+
+Un PASS técnico no implica aprobación estética. Cada fila cambia a `Aprobada`
+sólo después de revisar capturas reales y, para flujos sensibles del sistema,
+probar en dispositivo físico.
+
+## Inventario vivo
+
+La unidad de seguimiento es una superficie con una decisión visual propia, no
+cada diálogo ni cada estado de carga.
+
+| # | Superficie | Estado | Evidencia o siguiente paso |
+|---:|---|---|---|
+| 1 | Splash | Aprobada | Salvia light y AMOLED; conserva el logo oficial. |
+| 2 | Acceso | Activa | Nube estacionada: sólo espacio local y restauración; pendiente Release física y aprobación de Uri. |
+| 3 | Onboarding: Tu primer hábito | Activa | Gates automáticos y Release instalada; pendiente recorrido y aprobación de Uri. |
+| 4 | Hoy | Aprobada | Resumen, navegación, progreso y acciones principales. |
+| 5 | Mis hábitos | Aprobada | Activos, pausados, búsqueda, filtros y CTA. |
+| 6 | Crear/editar hábito | Activa | Consenso 2/2 y Release instalada; pendiente recorrido y aprobación de Uri. |
+| 7 | Notas: biblioteca | Activa | Vista previa legible, progreso, búsqueda con fragmento y filtro por etiqueta; pendiente Release física y aprobación de Uri. |
+| 8 | Notas: superficie única | Activa | Lectura y escritura en el mismo lugar, sin modo editar; pendiente Release física y aprobación de Uri. |
+| 9 | Recordatorio de nota | Pendiente | Revisar privacidad, fecha, hora y permisos. |
+| 10 | Preparar enfoque | Pendiente | Rediseñar dial y presets. |
+| 11 | Enfoque activo | Pendiente | Aplicar Inmersión y corregir salida/cancelación. |
+| 12 | Historial de enfoque | Pendiente | Revisar jerarquía y estados vacíos. |
+| 13 | Progreso y logros | Pendiente | Evitar métricas duplicadas y validar eventos reales. |
+| 14 | Historial de actividad | Pendiente | Revisar actividad, archivo y filtros. |
+| 15 | Calendario | Pendiente | Unificar resumen, leyenda y detalle diario. |
+| 16 | Perfil | Pendiente | Reducir cards sin esconder identidad ni cuenta. |
+| 17 | Ajustes | Activa | Cuenta y sincronización sustituidas por estado local-only; pendiente Release física y aprobación de Uri. |
+| 18 | Acerca de | Pendiente | Compactar información legal y de versión. |
+| 19 | Soporte | Pendiente | Confirmar si sigue como pantalla independiente. |
+
+Estado del corte: 3 superficies aprobadas, 6 activas y 10 pendientes. Las
+superficies activas cuentan como pendientes hasta cerrar todos sus gates.
+
+## Corte activo: nube estacionada
+
+La build vigente es local-only. Este corte afecta únicamente Acceso, Ajustes,
+la recuperación de un fallo al cargar sesión y la infraestructura de arranque,
+identidad y persistencia relacionada con nube.
+
+- Supabase queda apagado por default mediante `ZENTRA_CLOUD_ENABLED=false`.
+- URL, publishable key y flags OAuth no tienen efecto mientras el switch raíz
+  permanezca apagado.
+- Una identidad previamente vinculada conserva el mismo `ownerId`, hábitos,
+  notas, registros, sesiones y progreso. Sólo se retira su proveedor activo y
+  se registra localmente que la identidad quedó estacionada.
+- La sesión segura de Supabase se elimina del dispositivo sin contactar la red.
+- El vínculo y la outbox existentes permanecen congelados en Drift para una
+  futura reactivación. Las nuevas escrituras locales no generan outbox.
+- `Salir de este espacio` termina sólo la sesión local.
+- `Eliminar espacio de este dispositivo` elimina sólo la copia local. No llama
+  a Supabase ni promete borrar una identidad o datos remotos.
+- El error `Tu espacio necesita otro intento` conserva `Reintentar` y agrega
+  `Volver al acceso`, para que ninguna preparación fallida encierre al usuario.
+- Contrato y criterios de reactivación:
+  [`zentra-cloud-parking-plan.md`](zentra-cloud-parking-plan.md).
+
+Estado del gate: pruebas enfocadas en PASS. Análisis completo, suite completa,
+Screen Reviewer incremental, Release física y `URI APPROVED` todavía pendientes.
+
+## Corte reabierto: Onboarding
+
+El onboarding aprobado ahora es una sola superficie `2 / 2`. Se retiró por
+completo `Hazlo tuyo`, talismán, intención y la confirmación posterior a
+restaurar. Restaurar entra directo a Hoy. El único paso permite crear o saltar
+el primer hábito, elegir una categoría mediante píldoras ajustadas con punto de
+acento y revisar los recordatorios listos. El permiso del sistema se solicita
+sólo al tocar `Comenzar en Zentra`; si se niega, Hoy muestra un aviso
+descartable.
+
+- Mockup aprobado: `design/approved/onboarding-first-habit-approved-2026-08-03.png`.
+- Evidencia de matriz: `build/screen-review/onboarding-final-20260803/`.
+- Corrección compacta final: `build/screen-review/onboarding-final-compact-v2-20260803/`.
+- Estado: TECHNICAL, CONTRACT, VISUAL y simuladores en PASS. Falta probar la
+  Release física y obtener `URI APPROVED`.
+- Release `2.0.0 (25)` instalada y lanzada el 3 de agosto de 2026 en
+  `jesutorr’s iPhone`, bundle `com.jesutorr.appzentra`; falta el recorrido
+  manual de Uri.
+
+## Corte activo: Crear/editar hábito
+
+### Objetivo
+
+Convertir el formulario actual, largo y organizado como pasos, en una sola
+composición Salvia que permita crear o editar un hábito recurrente o una
+actividad única sin scroll en un iPhone moderno con escala de texto normal.
+
+`Sin scroll` no es una restricción absoluta. Con teclado abierto, 320 dp de
+ancho, texto grande, orientación horizontal o un error de validación, el
+contenido debe poder desplazarse para que ninguna acción quede inaccesible.
+
+### Contrato visual
+
+1. El encabezado contiene atrás, título y un segmento de dos estados:
+   `Se repite` y `Una sola vez`.
+2. El formulario conserva una sola acción primaria persistente.
+3. El cuerpo evita cards numeradas, preview, copy de ayuda repetido y la
+   sección `Opciones avanzadas`.
+4. `Qué quieres hacer` usa un campo con label persistente y sugerencia
+   accesible mediante el icono de destellos.
+5. Las cinco categorías viven en una fila de controles del mismo ancho y alto.
+   La selección se comunica con borde, superficie y semántica, no sólo color.
+6. Los siete días usan `Expanded` y `AspectRatio(1)` para ocupar exactamente el
+   ancho disponible sin números mágicos.
+7. El modo recurrente muestra presets `Todos`, `L-V`, `S-D` y `Otro`.
+8. El modo de una sola vez muestra `Hoy`, `Mañana` y `Elegir`, más una fila con
+   la fecha completa.
+9. `Recordarme` conserva switch, permiso y hora. Al activarse, la hora aparece
+   como control compacto en la misma fila.
+10. El CTA usa `Crear hábito` en recurrente, `Crear actividad` en una sola vez
+    y `Guardar cambios` al editar cualquiera de los dos.
+
+### Decisiones de comportamiento
+
+- El modelo y repositorio continúan usando `Habit`. `Actividad` es copy de UI
+  para el caso `isOneTime`; no se renombra el dominio ni se cambia el esquema.
+- Toda actividad nueva de una sola vez guarda `scheduledDate`. `Hoy` es el
+  default; `Mañana` y `Elegir` actualizan la misma fuente de verdad.
+- Un registro legado `isOneTime` sin `scheduledDate` se muestra inicialmente en
+  `Hoy`, pero no se modifica hasta que el usuario guarde.
+- En una sola vez, los círculos de días son informativos. Sólo el día de la
+  fecha elegida aparece marcado con borde, no relleno, para que no parezca una
+  recurrencia. La fecha se cambia desde `Hoy`, `Mañana` o `Elegir`.
+- En recurrente, `Otro` habilita selección múltiple directa de días. Elegir o
+  quitar un día actualiza el resumen visible.
+- El permiso de notificaciones se solicita únicamente al encender el switch.
+  Negarlo deja el recordatorio apagado y permite guardar.
+- Un recordatorio de actividad única debe quedar en una fecha y hora futuras.
+- Editar conserva `id`, `createdAt`, historial, archivo, modo, categoría,
+  frecuencia, fecha y recordatorio existentes.
+- Eliminar permanece sólo en edición, dentro de un menú secundario en el
+  encabezado y con la confirmación destructiva actual.
+- El doble tap no puede crear duplicados y un fallo al guardar conserva el
+  contenido del formulario.
+
+### Responsive y accesibilidad
+
+- Teléfono normal: composición de una sola pantalla con CTA inferior.
+- Teléfono compacto, texto grande o teclado: `SafeArea` y scroll de respaldo;
+  el CTA sigue siendo alcanzable y el campo enfocado permanece visible.
+- iPad mini y iPad Pro: formulario centrado con ancho máximo aproximado de
+  640 a 700 dp. No se estira como teléfono ni se conserva una segunda columna
+  vacía sólo para una preview eliminada.
+- Objetivos táctiles de al menos 48 dp.
+- Labels, valores y estado seleccionado disponibles para VoiceOver/TalkBack.
+- El día de una actividad única se anuncia como, por ejemplo,
+  `Martes, fecha seleccionada`.
+- El cambio de modo usa transición de 220 a 300 ms. Con Reduce Motion se reduce
+  a un cambio de estado o fade breve.
+- Light y AMOLED usan tokens existentes de tema y categoría. No se agregan
+  hexadecimales sueltos al widget.
+
+### Plan de implementación
+
+#### Fase 1. Estado y compatibilidad
+
+1. Sustituir la combinación de `isOneTime`, `advancedExpanded` y
+   `addToCalendar` por un único modo de programación visible desde el inicio.
+2. Mantener los campos y contratos existentes de `Habit`, controller,
+   repositorio y servicio de recordatorios.
+3. Hacer que una actividad nueva siempre tenga fecha, sin migración automática
+   ni escritura silenciosa de registros anteriores.
+4. Centralizar resúmenes de frecuencia, fecha y CTA para que el copy no se
+   desincronice del estado.
+
+#### Fase 2. Composición Salvia
+
+1. Rehacer encabezado y control segmentado.
+2. Aplanar identidad y categoría en un solo bloque visual.
+3. Construir la fila compacta de categorías con cinco controles flexibles.
+4. Construir una tira de siete días compartida por ambos modos.
+5. Intercambiar presets recurrentes y de fecha con `AnimatedSwitcher` o
+   equivalente compatible con Reduce Motion.
+6. Integrar fecha, recordatorio y hora como filas compactas.
+7. Mantener un único CTA inferior y adaptar el modo edición.
+
+#### Fase 3. Responsive, teclado y tablet
+
+1. Ajustar densidad vertical para que el flujo normal quepa sin scroll en
+   iPhone 16e y iPhone 17 Pro Max.
+2. Conservar scroll de respaldo para texto grande, teclado y errores.
+3. Reemplazar la composición iPad de formulario más preview por un formulario
+   centrado y acotado.
+4. Verificar safe areas, orientación, contraste aumentado y escalas de texto.
+
+#### Fase 4. Pruebas y evidencia
+
+1. Actualizar las pruebas existentes sin rebajar sus assertions de lógica.
+2. Agregar cobertura para cambio de modo, presets, fecha, día informativo,
+   reminder/hora, hidratación de edición y copy de CTA.
+3. Conservar casos de permiso negado, recordatorio futuro, doble tap, fallo de
+   guardado, eliminación, dark y Reduce Motion.
+4. Proteger explícitamente el layout normal sin scroll y el fallback accesible
+   a 320 dp con 320 por ciento de texto.
+5. Crear un scope `habit-form` del Screen Reviewer con ocho estados por
+   dispositivo:
+   - recurrente light;
+   - recurrente AMOLED;
+   - una sola vez light;
+   - una sola vez AMOLED;
+   - días personalizados;
+   - recordatorio con hora;
+   - teclado abierto;
+   - edición con acción destructiva disponible.
+6. Ejecutarlo en iPhone 16e, iPhone 17 Pro Max, iPad mini e iPad Pro.
+7. Correr `flutter analyze`, pruebas enfocadas y suite completa.
+8. Presentar capturas a Uri. El PASS técnico no cierra el gate sin su aprobación
+   estética.
+
+### Estado de fases del corte activo
+
+| Fase | Estado | Gate necesario para cerrarla |
+|---|---|---|
+| 1. Estado y compatibilidad | Verificada; pendiente Uri | TECHNICAL y CONTRACT PASS, suite completa y consenso 2/2. |
+| 2. Composición Salvia | Verificada; pendiente Uri | VISUAL y CONTRACT PASS contra el mockup aprobado. |
+| 3. Responsive, teclado y tablet | Verificada; pendiente Uri | Cuatro simuladores PASS; teclado nativo pendiente en Release físico. |
+| 4. Pruebas y evidencia | Verificada; pendiente Uri | Análisis, 620 pruebas, matrices y consenso final en PASS. |
+
+`Completada` se escribe únicamente después del gate de consenso descrito abajo.
+Terminar código o recibir dos opiniones favorables no basta por sí solo.
+
+#### Evidencia de Fase 1
+
+- El modo recurrente o una sola vez tiene una única fuente de verdad.
+- El selector de modo está siempre visible y `Opciones avanzadas` fue retirado.
+- El copy de encabezado, CTA, validación, permisos, errores y eliminación se
+  deriva del modo.
+- Toda actividad única nueva guarda una fecha local normalizada, sin hora.
+- Un registro legado sin fecha no se reescribe al abrirse; recibe fecha sólo al
+  guardarse explícitamente.
+- La suite completa pasó con 620 pruebas. Cinco integraciones Supabase quedaron
+  omitidas de forma explícita porque requieren las variables del entorno de
+  test remoto.
+- `flutter analyze` terminó sin issues.
+- El revisor lógico detectó dos huecos de cobertura: eliminación desde el
+  formulario y restauración completa sin flash de Acceso/Onboarding. Ambos se
+  agregaron y pasaron; la reauditoría emitió TECHNICAL y CONTRACT PASS.
+- El revisor visual comparó los dos mockups contra las matrices light/AMOLED de
+  iPhone 16e, iPhone 17 Pro Max, iPad mini e iPad Pro. Emitió VISUAL, CONTRACT y
+  DEVICE PASS para simuladores y confirmó el resultado después del delta final.
+- `habit-form-matrix-20260803` pasó 8/8 en cada dispositivo.
+- `onboarding-final-20260803` pasó 6/6 en cada dispositivo; el iPhone 16e usa
+  como evidencia compacta autoritativa `onboarding-final-compact-v2-20260803`.
+- El alcance se limitó a Crear/editar hábito y dependencias directas. No se
+  revisaron Notas, Hoy, Enfoque ni otras superficies.
+
+Las cuatro fases siguen abiertas únicamente hasta validar la Release ya
+instalada en el iPhone físico y recibir `URI APPROVED`. No se marcan
+`Completada` ni `Aprobada` antes de ese último gate.
+
+### Gate de consenso por fase
+
+Cada fase usa el mismo ciclo obligatorio:
+
+1. Joy implementa la fase y ejecuta sus comprobaciones locales.
+2. Se lanzan dos agentes revisores independientes. Ambos reciben el objetivo,
+   el diff, los criterios de aceptación y una lista explícita de superficies
+   afectadas, pero preparan primero su veredicto sin ver el del otro.
+3. El Revisor A prioriza corrección, regresiones, persistencia, permisos y
+   pruebas. El Revisor B prioriza UX Salvia, responsive, accesibilidad,
+   movimiento y consistencia con las pantallas aprobadas. Los dos pueden
+   reportar hallazgos de cualquier categoría.
+4. Después de la revisión independiente, ambos contrastan hallazgos. Deben
+   producir acuerdos, desacuerdos y evidencia concreta. No se fuerza consenso.
+5. Joy revisa los comentarios contra código, pruebas y capturas reales. Un
+   comentario incorrecto se descarta con evidencia; uno válido se corrige.
+6. Se vuelven a ejecutar las comprobaciones afectadas. Si cambió materialmente
+   la implementación, los revisores reciben el delta final para confirmar que
+   sus bloqueos quedaron resueltos.
+7. Joy entrega a Uri el veredicto, los hallazgos corregidos, los riesgos
+   residuales y la evidencia exacta que debe verificar.
+8. Uri prueba o inspecciona el resultado. Sólo cuando Uri confirma que está bien
+   se cambia la fase a `Completada` en esta tabla.
+
+Si los dos revisores discrepan, existe un fallo reproducible, falta evidencia o
+Uri no aprueba el resultado, la fase permanece abierta. El acuerdo de agentes
+es una revisión adicional, no una sustitución del criterio de Uri ni de los
+checks automatizados.
+
+La revisión es incremental. Los agentes sólo recorren la pantalla activa, los
+componentes compartidos modificados por esa fase y los flujos directamente
+dependientes. No se vuelven a revisar Notas, Hoy, Enfoque u otras superficies
+estables si el diff no las afecta. La matriz completa se reserva para el cierre
+del producto o para un cambio transversal real de tema, navegación,
+persistencia o infraestructura.
+
+### Archivos previstos
+
+- `lib/presentation/habit_form_screen.dart`
+- `test/widget/habit_form_screen_test.dart`
+- `integration_test/screen_reviewer_test.dart`
+- `tool/run_screen_reviewer.dart`
+- `docs/screen-reviewer.md`
+- este tracker y, si cambia una regla global, el plan minimalista principal.
+
+No se prevén cambios de schema, migraciones Supabase ni renombres del dominio.
+Si la implementación demuestra que alguno es necesario, se detiene ese cambio
+de alcance y se documenta antes de tocar persistencia.
+
+### Criterio de terminado
+
+- Crear y editar funcionan en los dos modos.
+- Una actividad única aparece sólo en su fecha y su recordatorio se programa una
+  sola vez.
+- Frecuencia recurrente y presets producen exactamente los días esperados.
+- No hay scroll en el flujo normal de teléfono ni overflow en los fallbacks.
+- El teclado no oculta la acción necesaria.
+- Light, AMOLED, iPhone e iPad tienen composición intencional.
+- Semántica, contraste, Reduce Motion y targets táctiles pasan revisión.
+- Análisis, pruebas enfocadas, suite completa y scope visual pasan.
+- Dos revisores independientes alcanzan consenso sin bloqueos pendientes y Joy
+  verifica su conclusión contra la evidencia.
+- Uri aprueba las capturas.
+
+## Corte activo: Notas en Markdown vivo
+
+La nota dejó de tener un modo lectura y un modo edición separados. El cuerpo
+siempre se ve renderizado y sólo el bloque bajo el cursor se convierte en
+Markdown literal. `NoteEditorScreen` se retiró; la única superficie es
+`NoteSurface`.
+
+- Plan: [`superpowers/plans/2026-08-03-notas-markdown-vivo.md`](superpowers/plans/2026-08-03-notas-markdown-vivo.md).
+- Scope del Screen Reviewer: `notes`, 10 capturas por dispositivo.
+- Evidencia: `build/screen-review/notes-20260804/`, en iPhone 16e,
+  iPhone 17 Pro Max, iPad mini (A17 Pro) e iPad Pro 13-inch (M5).
+- Los cuatro dispositivos pasaron 10/10 sin excepciones de Flutter.
+
+### Estado de los gates
+
+| Gate | Estado |
+|---|---|
+| TECHNICAL | PASS: recorrido completo y suite enfocada en verde. |
+| CONTRACT | PASS con hallazgos: nada prohibido aparece, pero quedan cinco observaciones abiertas. |
+| VISUAL | Pendiente: las capturas existen y fueron revisadas, falta el sí de Uri. |
+| DEVICE | PASS en simuladores; Release física pendiente. |
+| URI APPROVED | Pendiente. |
+
+### Hallazgos de la revisión visual del 4 de agosto
+
+Ninguno es bloqueante. Se registran aquí en vez de corregirse en la tarea de
+cierre, para que el arreglo entre con su propia revisión.
+
+Importantes:
+
+1. La barra de formato se desborda en todo iPhone. `Deshacer` y `Rehacer`
+   quedan siempre fuera de pantalla y el scroll horizontal no tiene ninguna
+   señal visible. iPhone 16e muestra 7 de 11 controles, iPhone 17 Pro Max
+   muestra 9 de 11 y ambos iPad muestran los 11.
+2. El título de la nota y un bloque `#` usan el mismo `headlineSmall`, así que
+   `Repasar Álgebra lineal` y `Repaso de la semana` compiten como si fueran
+   dos títulos.
+3. Al elegir una etiqueta, la tira se desplaza y deja el chip `Todas` casi
+   fuera de pantalla, justo la salida explícita que el filtro promete.
+4. En la columna lateral de 320 dp la ayuda del campo de etiquetas se recorta
+   a `Escribe una y confirma para agre…` en vez de envolverse.
+5. Al escribir, el encabezado carga seis controles y en un teléfono compacto
+   el estado de guardado se recorta a `Sin …`.
+
+Pulido:
+
+6. El fragmento de búsqueda empieza a media palabra: `…a Transformaciones,`.
+7. Las etiquetas del panel de detalles no tienen contorno de chip, mientras
+   que los acentos sí, y se leen como texto suelto con una equis.
+8. La hoja de detalles no tiene ancho máximo en tablet y se estira en iPad
+   mini.
+9. La biblioteca pasa a lista y detalle en 800 dp, pero la nota sólo gana
+   columna lateral en 840 dp. Un iPad Pro de 11 pulgadas en vertical, con
+   834 dp, recibe biblioteca de dos paneles y nota con hoja inferior.
+
+## Protocolo para cada pantalla siguiente
+
+1. Mover una sola superficie a `Activa`.
+2. Congelar su contrato visual y sus decisiones de comportamiento.
+3. Implementar sin rediseñar superficies ya aprobadas.
+4. Aplicar el gate de dos revisores en cada fase.
+5. Ejecutar lógica y Screen Reviewer sólo para lo modificado.
+6. Mostrar evidencia light, AMOLED, teléfono y tablet.
+7. Marcar `Aprobada` sólo después del sí de Uri, o volver a `Activa` con
+   hallazgos.
+8. Al final del producto, ejecutar la matriz completa antes de release.

@@ -1,0 +1,135 @@
+# Zentra Screen Reviewer
+
+El Screen Reviewer recorre el flujo principal de Zentra con widgets de
+producción sobre simuladores reales. En cada parada:
+
+- realiza acciones por texto, tooltip o tipo de widget, no por coordenadas;
+- falla ante excepciones de layout o render;
+- verifica que la pantalla esperada haya abierto;
+- toma una captura PNG;
+- genera un reporte Markdown por dispositivo.
+
+## Cobertura inicial
+
+1. Splash
+2. Acceso local-first y restauración
+3. Onboarding de una pantalla: primer hábito y recordatorios listos
+4. Onboarding: ajuste de recordatorios
+5. Today: aviso descartable después de negar notificaciones
+6. Today con datos
+7. Crear y editar hábito recurrente o actividad única
+8. Mis hábitos con estado activo, búsqueda y archivados
+9. Notas: biblioteca, búsqueda, nota en lectura, nota en escritura y
+    recordatorio
+10. Enfoque rápido, dial de duración, ciclo Pomodoro, sesión activa,
+    pausa e historial
+11. Progreso, colección de logros, actividad durable y archivo de tareas
+12. Calendario
+13. Perfil
+14. Configuración
+15. Acerca de
+
+## Ejecutar en todos los simuladores iOS encendidos
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart
+```
+
+Si el checkout no contiene el SDK fijado, el runner usa `FLUTTER_ROOT` o el
+`flutter` disponible en `PATH`. También se puede fijar explícitamente:
+
+```bash
+SCREEN_REVIEW_FLUTTER=/ruta/al/flutter \
+  dart run tool/run_screen_reviewer.dart
+```
+
+## Ejecutar en un solo simulador
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --device AD73667E-15C3-48D3-B1C7-B7B45C808754
+```
+
+## Revisar solo una pantalla modificada
+
+Durante un revamp incremental se puede limitar el recorrido a la pantalla
+afectada. El scope conserva datos deterministas, interacciones reales,
+capturas light/AMOLED y detección de excepciones, sin recorrer pantallas que no
+cambiaron:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope habits \
+  --device AD73667E-15C3-48D3-B1C7-B7B45C808754
+```
+
+Para revisar Splash, Acceso local, el aviso de nube estacionada en Ajustes y
+la salida recuperable de un workspace, incluidas sus variantes AMOLED:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope entry
+```
+
+Este scope genera 9 capturas por dispositivo y afirma que Google, Apple y la
+sincronización Supabase no aparecen como acciones activas.
+
+Para revisar el onboarding Salvia de una sola pantalla, el sheet de
+recordatorios y el aviso posterior al permiso negado:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope onboarding
+```
+
+Este scope genera 6 capturas por dispositivo: primer hábito, ajustes y aviso
+de permiso negado, cada uno en light y AMOLED. Teléfono y tablet conservan una
+sola columna centrada y acotada.
+
+Para revisar únicamente Crear/editar hábito:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope habit-form
+```
+
+Este scope genera 8 capturas por dispositivo: recurrente y actividad única en
+light/AMOLED, días personalizados, recordatorio, teclado y menú de edición.
+
+Para revisar la biblioteca de Notas y la superficie única de nota:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope notes
+```
+
+Este scope genera 10 capturas por dispositivo: biblioteca, filtro por
+etiqueta, búsqueda con fragmento resaltado, nota en lectura, nota en
+escritura con la barra de formato, detalles, checklist terminada y la
+repetición light/AMOLED de biblioteca, lectura y escritura. La nota sembrada
+trae encabezado, negritas, casillas y cita, así que la captura muestra el
+formato renderizado y no sólo un párrafo. En una ventana angosta los detalles
+salen como hoja inferior; en una ancha salen como columna lateral y la captura
+la muestra plegada.
+
+Los scopes disponibles viven en `tool/run_screen_reviewer.dart`. La matriz
+completa se reserva para cerrar un bloque de pantallas o preparar un release.
+
+Los artefactos quedan bajo `build/screen-review/<timestamp>/`. Cada corrida
+incluye `report.md` y una carpeta de capturas por dispositivo.
+
+## Qué valida y qué no
+
+Un `PASS` técnico exige que el recorrido termine, que no existan excepciones de
+Flutter y que se generen las 42 capturas esperadas por dispositivo en el scope
+completo, o el conteo exacto definido para un scope incremental. Las
+capturas permiten que Uri y Codex revisen jerarquía, espaciado, contraste y
+feeling. Por eso `PASS` no significa por sí solo que el diseño visual esté
+aprobado.
+
+El driver falla si dos capturas intentan usar el mismo nombre en una corrida.
+Esto evita un falso PASS causado por sobrescrituras silenciosas.
+
+No se usan comparaciones pixel a pixel por default porque cambian entre
+versiones de iOS, fuentes y motores de render. Si una pantalla se estabiliza,
+se puede promover después a golden test con una tolerancia explícita.
