@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../domain/markdown_inline.dart';
 
-/// Families tried for code spans. `monospace` covers Android, `Menlo` covers
-/// iOS and macOS, where `monospace` is not a resolvable family name.
-const _monospaceFallback = <String>['monospace', 'Menlo', 'Courier New'];
+/// Families tried for monospaced text. `monospace` covers Android, `Menlo`
+/// covers iOS and macOS, where `monospace` is not a resolvable family name.
+/// Shared so code spans and code fences resolve to the same face.
+const monospaceFontFamilies = <String>['monospace', 'Menlo', 'Courier New'];
 
 /// Builds the inline spans for a block of note text.
 ///
@@ -55,8 +56,8 @@ TextStyle _styleFor(MarkdownInlineSegment segment, TextStyle baseStyle) {
   }
   if (segment.styles.contains(MarkdownInlineStyle.code)) {
     style = style.copyWith(
-      fontFamily: _monospaceFallback.first,
-      fontFamilyFallback: _monospaceFallback.sublist(1),
+      fontFamily: monospaceFontFamilies.first,
+      fontFamilyFallback: monospaceFontFamilies.sublist(1),
     );
   }
   // Both decorations can land on the same segment, so they are merged instead
