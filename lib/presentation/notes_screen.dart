@@ -41,12 +41,25 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
     final notes =
         ownerId == null ? null : ref.watch(noteControllerProvider(ownerId));
 
+    // A compact window drops the header that carries "Nueva nota" on wider
+    // ones, so the action moves to a button that stays put while the library
+    // scrolls instead of riding away with the list.
+    final isCompact = context.zentraWindowClass == ZentraWindowClass.compact;
+
     return Scaffold(
       key: const ValueKey('notes-screen'),
       appBar: AppBar(
         title: const Text('Notas'),
         centerTitle: false,
       ),
+      floatingActionButton: isCompact && ownerId != null
+          ? FloatingActionButton.extended(
+              key: const ValueKey('notes-add'),
+              onPressed: _createNote,
+              icon: const Icon(Icons.note_add_outlined),
+              label: const Text('Nueva nota'),
+            )
+          : null,
       body: ownerId == null || notes == null
           ? const _NotesLoadingState()
           : notes.when(
@@ -103,10 +116,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
                       );
                     }
 
-                    final header = _NotesHeader(
-                      isCompact: layout.isCompact,
-                      onCreate: _createNote,
-                    );
+                    final header = _NotesHeader(onCreate: _createNote);
                     final controls = Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -142,10 +152,12 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
                           children: [
-                            header,
-                            SizedBox(height: context.spacing.md),
-                            if (layout.isCompact) ...[
-                              NotesCaptureCard(onCreate: _createNote),
+                            // The app bar already names the screen. Repeating
+                            // the idea in a hero, and then offering a card
+                            // that only duplicates the create button, pushed
+                            // the first note past the fold on a phone.
+                            if (!layout.isCompact) ...[
+                              header,
                               SizedBox(height: context.spacing.md),
                             ],
                             controls,
@@ -171,6 +183,11 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
                                     opensEditor: true,
                                   ),
                                 ),
+                            // Clearance for the floating button, which would
+                            // otherwise cover the last note at the end of the
+                            // scroll.
+                            if (layout.isCompact)
+                              SizedBox(height: context.spacing.xxl),
                           ],
                         ),
                       );
@@ -634,14 +651,14 @@ class _NotesPageFrame extends StatelessWidget {
   }
 }
 
+/// The library's opening lines, for windows wide enough to afford them.
+///
+/// A compact window shows neither this nor a hero of its own: the app bar
+/// already names the screen, and the space belongs to the notes.
 class _NotesHeader extends StatelessWidget {
-  final bool isCompact;
   final VoidCallback onCreate;
 
-  const _NotesHeader({
-    required this.isCompact,
-    required this.onCreate,
-  });
+  const _NotesHeader({required this.onCreate});
 
   @override
   Widget build(BuildContext context) {
@@ -652,9 +669,7 @@ class _NotesHeader extends StatelessWidget {
       children: [
         Text(
           'Ideas que vuelven cuando sirven',
-          style: isCompact
-              ? theme.textTheme.titleLarge
-              : theme.textTheme.headlineSmall,
+          style: theme.textTheme.headlineSmall,
         ),
         SizedBox(height: context.spacing.xs),
         Text(
@@ -665,7 +680,6 @@ class _NotesHeader extends StatelessWidget {
         ),
       ],
     );
-    if (isCompact) return copy;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

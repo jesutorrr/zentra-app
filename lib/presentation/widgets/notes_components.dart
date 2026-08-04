@@ -4,13 +4,21 @@ import 'package:flutter/material.dart';
 
 import '../../domain/markdown_document.dart';
 import '../design_tokens.dart';
+import '../motion_policy.dart';
 import 'note_block_editor.dart';
 import 'note_block_view.dart';
+
+/// Width below which the four section chips stop fitting on one line.
+///
+/// Measured against the longest set of labels rather than a device class: the
+/// chips are as wide as their text, and the same threshold already decides how
+/// much the search field spells out.
+const double _sectionsFitOneLine = 480;
 
 enum NotesLibrarySection {
   review('Para repasar', Icons.notifications_active_outlined),
   pinned('Fijadas', Icons.push_pin_outlined),
-  recent('Recientes', Icons.schedule_rounded),
+  recent('Recientes', Icons.schedule_outlined),
   archived('Archivadas', Icons.archive_outlined);
 
   final String label;
@@ -26,7 +34,7 @@ enum NoteSaveVisualState {
   error,
 }
 
-class NotesSectionSelector extends StatelessWidget {
+class NotesSectionSelector extends StatefulWidget {
   final NotesLibrarySection selected;
   final ValueChanged<NotesLibrarySection> onSelected;
 
@@ -37,24 +45,101 @@ class NotesSectionSelector extends StatelessWidget {
   });
 
   @override
+  State<NotesSectionSelector> createState() => _NotesSectionSelectorState();
+}
+
+class _NotesSectionSelectorState extends State<NotesSectionSelector> {
+  /// One key per section so the strip can scroll the live filter into view.
+  final _chipKeys = {
+    for (final section in NotesLibrarySection.values)
+      section: GlobalKey(debugLabel: 'notes-section-${section.name}'),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _revealSelected();
+  }
+
+  @override
+  void didUpdateWidget(NotesSectionSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) _revealSelected();
+  }
+
+  /// Brings the live filter on screen once the strip has been laid out.
+  ///
+  /// A narrow window scrolls the sections, and the one doing the filtering is
+  /// the one the reader most needs to see: without this, opening the library
+  /// on a phone hides the active section past the right edge and the list
+  /// looks filtered by whichever chip happens to be visible.
+  void _revealSelected() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chipContext = _chipKeys[widget.selected]?.currentContext;
+      if (chipContext == null || !mounted) return;
+      // Only the horizontal strip. A wide window lays the chips out in a Wrap,
+      // where the nearest scrollable is the library itself, and asking that to
+      // reveal a chip would scroll the notes out from under the reader.
+      final position = Scrollable.maybeOf(chipContext)?.position;
+      if (position == null || position.axis != Axis.horizontal) return;
+      Scrollable.ensureVisible(
+        chipContext,
+        alignment: 0.5,
+        duration: context.motionPolicy.duration(
+          const Duration(milliseconds: 200),
+        ),
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final selected = widget.selected;
     final chips = [
       for (final section in NotesLibrarySection.values)
-        ChoiceChip(
-          key: ValueKey('notes-section-${section.name}'),
-          avatar: Icon(section.icon, size: 18),
-          label: Text(section.label),
-          selected: selected == section,
-          onSelected: (_) => onSelected(section),
+        // The global key rides on a wrapper so the chip keeps the value key
+        // callers already reach for.
+        KeyedSubtree(
+          key: _chipKeys[section],
+          child: ChoiceChip(
+            key: ValueKey('notes-section-${section.name}'),
+            avatar: Icon(section.icon, size: 18),
+            label: Text(section.label),
+            selected: selected == section,
+            onSelected: (_) => widget.onSelected(section),
+          ),
         ),
     ];
 
     return Semantics(
       label: 'Secciones de notas',
-      child: Wrap(
-        spacing: context.spacing.xs,
-        runSpacing: context.spacing.xs,
-        children: chips,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // On a phone the four sections wrap onto a second line and push the
+          // first note further down than the notes themselves get to sit. One
+          // scrolling line costs a swipe to reach the last section, which is
+          // the same bargain the tag strip right below already makes.
+          if (constraints.maxWidth < _sectionsFitOneLine) {
+            return SingleChildScrollView(
+              key: const ValueKey('notes-section-scroll'),
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  for (final chip in chips) ...[
+                    chip,
+                    if (chip != chips.last) SizedBox(width: context.spacing.xs),
+                  ],
+                ],
+              ),
+            );
+          }
+          return Wrap(
+            spacing: context.spacing.xs,
+            runSpacing: context.spacing.xs,
+            children: chips,
+          );
+        },
       ),
     );
   }
@@ -92,84 +177,6 @@ class NotesSearchField extends StatelessWidget {
                   onPressed: onClear,
                   icon: const Icon(Icons.close_rounded),
                 ),
-        ),
-      ),
-    );
-  }
-}
-
-class NotesCaptureCard extends StatelessWidget {
-  final VoidCallback onCreate;
-
-  const NotesCaptureCard({
-    required this.onCreate,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final palette = context.zentraPalette;
-    return Material(
-      color: palette.calmMint.withValues(
-        alpha: theme.brightness == Brightness.dark ? 0.52 : 0.74,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radii.large),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        key: const ValueKey('notes-create-card'),
-        onTap: onCreate,
-        borderRadius: BorderRadius.circular(context.radii.large),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 88),
-          child: Padding(
-            padding: EdgeInsets.all(context.spacing.md),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface.withValues(alpha: 0.76),
-                    borderRadius: BorderRadius.circular(context.radii.medium),
-                  ),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    color: palette.brandTeal,
-                  ),
-                ),
-                SizedBox(width: context.spacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Captura una idea',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      SizedBox(height: context.spacing.xxs),
-                      Text(
-                        'Escribe primero. Organiza cuando te sirva.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: context.spacing.sm),
-                Icon(
-                  Icons.add_circle_rounded,
-                  color: palette.brandTeal,
-                  size: 32,
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

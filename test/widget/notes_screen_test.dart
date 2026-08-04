@@ -156,6 +156,71 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a phone spends its height on notes, not on a second title',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    // The app bar already names the screen, so the hero that repeated the
+    // idea is gone, and with it the card that only duplicated the create
+    // button below it.
+    expect(find.text('Notas'), findsOneWidget);
+    expect(find.text('Ideas que vuelven cuando sirven'), findsNothing);
+    expect(find.text('Captura una idea'), findsNothing);
+
+    // Creating a note stays one tap away, from a control the list cannot
+    // scroll out of reach.
+    final add = find.byKey(const ValueKey('notes-add'));
+    expect(add, findsOneWidget);
+    expect(add.hitTestable(), findsOneWidget);
+
+    // The point of all of the above: a note is visible without scrolling.
+    // Half the window is the loosest bar that still fails the old layout,
+    // which pushed the first card past three quarters of the height.
+    final firstCard = tester.getRect(find.text('Repasar Álgebra lineal'));
+    expect(firstCard.top, lessThan(844 / 2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the live section stays in sight when the strip has to scroll',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    // The library opens on 'Recientes', the third of four chips, which on a
+    // phone starts past the right edge of the strip. Leaving it there would
+    // show a list filtered by a section the reader cannot see.
+    final rect = tester.getRect(
+      find.byKey(const ValueKey('notes-section-recent')),
+    );
+    expect(rect.left, greaterThanOrEqualTo(0));
+    expect(rect.right, lessThanOrEqualTo(390));
+  });
+
+  testWidgets('a window with room to spare still opens with the hero',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(834, 1194));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ideas que vuelven cuando sirven'), findsOneWidget);
+    // The header carries its own create button here, so the floating one
+    // would be a second control for the same job.
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byKey(const ValueKey('notes-add')), findsOneWidget);
+  });
+
   testWidgets('an expanded window uses one shared list-detail route',
       (tester) async {
     await configureDevice(tester, logicalSize: const Size(1024, 1366));
@@ -406,10 +471,15 @@ void main() {
     await tester.scrollUntilVisible(
       all,
       240,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('notes-compact-layout')),
-        matching: find.byType(Scrollable),
-      ),
+      // The library itself, not the horizontal tag strip nested inside it,
+      // which is a second scrollable under the same root. Depth first order
+      // puts the vertical list ahead of anything it contains.
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('notes-compact-layout')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
 
