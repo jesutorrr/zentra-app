@@ -8,7 +8,9 @@ class WeeklyProgressChart extends StatefulWidget {
   final bool isDark;
 
   const WeeklyProgressChart({
-    required this.history, required this.isDark, super.key,
+    required this.history,
+    required this.isDark,
+    super.key,
   });
 
   @override
@@ -54,7 +56,7 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
               ],
             ),
             const SizedBox(height: 24),
-            
+
             // Chart
             SizedBox(
               height: 200,
@@ -68,7 +70,10 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipColor: (group) => colorScheme.inverseSurface,
                       tooltipBorderRadius: BorderRadius.circular(12),
-                      tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      tooltipPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final day = widget.history[groupIndex];
                         final completed = day['completed'] as int? ?? 0;
@@ -85,7 +90,8 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                     ),
                     touchCallback: (event, response) {
                       setState(() {
-                        if (response?.spot != null && event is! FlPointerExitEvent) {
+                        if (response?.spot != null &&
+                            event is! FlPointerExitEvent) {
                           _touchedIndex = response!.spot!.touchedBarGroupIndex;
                         } else {
                           _touchedIndex = -1;
@@ -103,19 +109,24 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                           if (index < 0 || index >= widget.history.length) {
                             return const SizedBox.shrink();
                           }
-                          final date = widget.history[index]['date'] as DateTime;
+                          final date =
+                              widget.history[index]['date'] as DateTime;
                           final isToday = _isToday(date);
-                          final dayName = DateFormat('E', 'es').format(date).substring(0, 1).toUpperCase();
-                          
+                          final dayName = DateFormat('E', 'es')
+                              .format(date)
+                              .substring(0, 1)
+                              .toUpperCase();
+
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               isToday ? 'Hoy' : dayName,
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-                                color: isToday 
-                                    ? colorScheme.primary 
+                                fontWeight:
+                                    isToday ? FontWeight.w700 : FontWeight.w500,
+                                color: isToday
+                                    ? colorScheme.primary
                                     : colorScheme.onSurfaceVariant,
                               ),
                             ),
@@ -135,7 +146,8 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                                 '${value.toInt()}%',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
                                 ),
                               ),
                             );
@@ -145,8 +157,12 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                         reservedSize: 35,
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   gridData: FlGridData(
                     show: true,
@@ -154,7 +170,8 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                     horizontalInterval: 25,
                     getDrawingHorizontalLine: (value) {
                       return FlLine(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                        color:
+                            colorScheme.outlineVariant.withValues(alpha: 0.3),
                         strokeWidth: 1,
                         dashArray: [5, 5],
                       );
@@ -163,8 +180,8 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
                   borderData: FlBorderData(show: false),
                   barGroups: _buildBarGroups(colorScheme),
                 ),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutBack,
               ),
             ),
           ],
@@ -187,14 +204,20 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
         barRods: [
           BarChartRodData(
             toY: progress,
-            width: isTouched ? 24 : 20,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            width: isTouched ? 22 : 18,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
             gradient: LinearGradient(
               colors: isToday
                   ? [colorScheme.primary, colorScheme.tertiary]
                   : isTouched
-                      ? [colorScheme.primary.withValues(alpha: 0.8), colorScheme.primary]
-                      : [colorScheme.primary.withValues(alpha: 0.4), colorScheme.primary.withValues(alpha: 0.6)],
+                      ? [
+                          colorScheme.primary.withValues(alpha: 0.8),
+                          colorScheme.primary,
+                        ]
+                      : [
+                          colorScheme.primary.withValues(alpha: 0.4),
+                          colorScheme.primary.withValues(alpha: 0.6),
+                        ],
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
             ),
@@ -211,9 +234,9 @@ class _WeeklyProgressChartState extends State<WeeklyProgressChart> {
 
   bool _isToday(DateTime date) {
     final now = DateTime.now();
-    return date.year == now.year && 
-           date.month == now.month && 
-           date.day == now.day;
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
   }
 }
 
@@ -223,7 +246,9 @@ class CategoryPieChart extends StatefulWidget {
   final bool isDark;
 
   const CategoryPieChart({
-    required this.categoryProgress, required this.isDark, super.key,
+    required this.categoryProgress,
+    required this.isDark,
+    super.key,
   });
 
   @override
@@ -237,7 +262,7 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     final colors = [
       colorScheme.primary,
       colorScheme.tertiary,
@@ -278,7 +303,6 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
               ],
             ),
             const SizedBox(height: 20),
-            
             SizedBox(
               height: 180,
               child: Row(
@@ -291,9 +315,10 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                         pieTouchData: PieTouchData(
                           touchCallback: (event, response) {
                             setState(() {
-                              if (response?.touchedSection != null && 
+                              if (response?.touchedSection != null &&
                                   event is! FlPointerExitEvent) {
-                                _touchedIndex = response!.touchedSection!.touchedSectionIndex;
+                                _touchedIndex = response!
+                                    .touchedSection!.touchedSectionIndex;
                               } else {
                                 _touchedIndex = -1;
                               }
@@ -302,15 +327,20 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                         ),
                         sectionsSpace: 2,
                         centerSpaceRadius: 40,
-                        sections: widget.categoryProgress.entries.toList().asMap().entries.map((entry) {
+                        sections: widget.categoryProgress.entries
+                            .toList()
+                            .asMap()
+                            .entries
+                            .map((entry) {
                           final index = entry.key;
                           final category = entry.value;
                           final isTouched = index == _touchedIndex;
                           final color = colors[index % colors.length];
-                          
+
                           return PieChartSectionData(
                             value: category.value,
-                            title: isTouched ? '${category.value.toInt()}%' : '',
+                            title:
+                                isTouched ? '${category.value.toInt()}%' : '',
                             color: color,
                             radius: isTouched ? 55 : 45,
                             titleStyle: const TextStyle(
@@ -321,22 +351,26 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                           );
                         }).toList(),
                       ),
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeOutBack,
                     ),
                   ),
-                  
+
                   // Legend
                   Expanded(
                     flex: 2,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: widget.categoryProgress.entries.toList().asMap().entries.map((entry) {
+                      children: widget.categoryProgress.entries
+                          .toList()
+                          .asMap()
+                          .entries
+                          .map((entry) {
                         final index = entry.key;
                         final category = entry.value;
                         final color = colors[index % colors.length];
-                        
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Row(
@@ -354,8 +388,8 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                                 child: Text(
                                   category.key,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                    fontWeight: index == _touchedIndex 
-                                        ? FontWeight.w600 
+                                    fontWeight: index == _touchedIndex
+                                        ? FontWeight.w600
                                         : FontWeight.w400,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -383,16 +417,18 @@ class StreakLineChart extends StatelessWidget {
   final bool isDark;
 
   const StreakLineChart({
-    required this.streakHistory, required this.isDark, super.key,
+    required this.streakHistory,
+    required this.isDark,
+    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
-    final maxStreak = streakHistory.isEmpty 
-        ? 7.0 
+
+    final maxStreak = streakHistory.isEmpty
+        ? 7.0
         : (streakHistory.reduce((a, b) => a > b ? a : b) + 2).toDouble();
 
     return Card(
@@ -426,7 +462,6 @@ class StreakLineChart extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            
             SizedBox(
               height: 150,
               child: LineChart(
@@ -437,7 +472,8 @@ class StreakLineChart extends StatelessWidget {
                     horizontalInterval: maxStreak / 4,
                     getDrawingHorizontalLine: (value) {
                       return FlLine(
-                        color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                        color:
+                            colorScheme.outlineVariant.withValues(alpha: 0.3),
                         strokeWidth: 1,
                         dashArray: [5, 5],
                       );
@@ -445,7 +481,9 @@ class StreakLineChart extends StatelessWidget {
                   ),
                   titlesData: FlTitlesData(
                     show: true,
-                    bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -455,14 +493,19 @@ class StreakLineChart extends StatelessWidget {
                             value.toInt().toString(),
                             style: TextStyle(
                               fontSize: 10,
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                              color: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
                             ),
                           );
                         },
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   borderData: FlBorderData(show: false),
                   minX: 0,
@@ -510,7 +553,8 @@ class StreakLineChart extends StatelessWidget {
                   ],
                   lineTouchData: LineTouchData(
                     touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (touchedSpot) => colorScheme.inverseSurface,
+                      getTooltipColor: (touchedSpot) =>
+                          colorScheme.inverseSurface,
                       tooltipBorderRadius: BorderRadius.circular(12),
                       getTooltipItems: (touchedSpots) {
                         return touchedSpots.map((spot) {
@@ -526,8 +570,8 @@ class StreakLineChart extends StatelessWidget {
                     ),
                   ),
                 ),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+                duration: const Duration(milliseconds: 500),
+                curve: Curves.easeOutBack,
               ),
             ),
           ],

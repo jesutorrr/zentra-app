@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,14 +12,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Tipos de feedback háptico según la acción
 enum HapticType {
-  light,       // Selección, hover
-  medium,      // Tap, toggle
-  heavy,       // Acción importante, confirmación
-  success,     // Completar tarea - patrón celebración
-  warning,     // Advertencia
-  error,       // Error - patrón de alerta
-  selection,   // Cambio de selección (picker)
-  impact,      // Impacto fuerte único
+  light, // Selección, hover
+  medium, // Tap, toggle
+  heavy, // Acción importante, confirmación
+  success, // Completar tarea - patrón celebración
+  warning, // Advertencia
+  error, // Error - patrón de alerta
+  selection, // Cambio de selección (picker)
+  impact, // Impacto fuerte único
 }
 
 /// Ejecuta feedback háptico según el tipo con patrones ricos
@@ -31,27 +32,33 @@ void triggerHaptic(HapticType type) {
     case HapticType.heavy:
       HapticFeedback.mediumImpact();
     case HapticType.success:
-      // Patrón de celebración: tap-tap-tap ascendente
-      HapticFeedback.lightImpact();
-      Future.delayed(const Duration(milliseconds: 80), () {
+      HapticFeedback.selectionClick();
+      Future.delayed(const Duration(milliseconds: 60), () {
+        HapticFeedback.lightImpact();
+      });
+      Future.delayed(const Duration(milliseconds: 130), () {
         HapticFeedback.mediumImpact();
       });
-      Future.delayed(const Duration(milliseconds: 160), () {
+      Future.delayed(const Duration(milliseconds: 220), () {
         HapticFeedback.heavyImpact();
       });
     case HapticType.warning:
-      // Patrón de advertencia: dos golpes
-      HapticFeedback.heavyImpact();
-      Future.delayed(const Duration(milliseconds: 150), () {
+      HapticFeedback.mediumImpact();
+      Future.delayed(const Duration(milliseconds: 120), () {
+        HapticFeedback.selectionClick();
+      });
+      Future.delayed(const Duration(milliseconds: 280), () {
         HapticFeedback.mediumImpact();
       });
     case HapticType.error:
-      // Patrón de error: tres golpes rápidos
       HapticFeedback.heavyImpact();
-      Future.delayed(const Duration(milliseconds: 100), () {
+      Future.delayed(const Duration(milliseconds: 80), () {
         HapticFeedback.heavyImpact();
       });
-      Future.delayed(const Duration(milliseconds: 200), () {
+      Future.delayed(const Duration(milliseconds: 160), () {
+        HapticFeedback.mediumImpact();
+      });
+      Future.delayed(const Duration(milliseconds: 240), () {
         HapticFeedback.heavyImpact();
       });
     case HapticType.selection:
@@ -74,32 +81,82 @@ class SoundService {
   static const String _keySoundsEnabled = 'sounds_enabled';
   bool _soundsEnabled = false;
   bool _initialized = false;
+  Future<void>? _initializing;
+  Future<void>? _preparingPlayer;
+  AudioPlayer? _completionPlayer;
 
-  /// Inicializa el servicio cargando preferencias
-  Future<void> initialize() async {
-    if (_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
-    _soundsEnabled = prefs.getBool(_keySoundsEnabled) ?? false;
-    _initialized = true;
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initializing ??= _initialize();
   }
 
-  /// Verifica si los sonidos están habilitados
+  Future<void> _initialize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _soundsEnabled = prefs.getBool(_keySoundsEnabled) ?? false;
+      if (_soundsEnabled) {
+        await _prepareCompletionPlayer();
+      }
+      _initialized = true;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  Future<void> _prepareCompletionPlayer() async {
+    if (_completionPlayer != null) return;
+    final pending = _preparingPlayer;
+    if (pending != null) {
+      await pending;
+      return;
+    }
+
+    final preparation = _createCompletionPlayer();
+    _preparingPlayer = preparation;
+    try {
+      await preparation;
+    } finally {
+      _preparingPlayer = null;
+    }
+  }
+
+  Future<void> _createCompletionPlayer() async {
+    final player = AudioPlayer();
+    try {
+      await player.setSource(AssetSource('sounds/completion.mp3'));
+      await player.setVolume(0.3);
+      await player.setReleaseMode(ReleaseMode.stop);
+      _completionPlayer = player;
+    } catch (_) {
+      await player.dispose();
+      rethrow;
+    }
+  }
+
   bool get soundsEnabled => _soundsEnabled;
 
-  /// Habilita o deshabilita los sonidos
   Future<void> setSoundsEnabled(bool enabled) async {
-    _soundsEnabled = enabled;
+    await initialize();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keySoundsEnabled, enabled);
+    _soundsEnabled = enabled;
+
+    if (enabled) {
+      await _prepareCompletionPlayer();
+      return;
+    }
+
+    final player = _completionPlayer;
+    _completionPlayer = null;
+    await player?.dispose();
   }
 
-  /// Reproduce sonido de éxito (completar hábito)
   void playSuccess() {
-    if (!_soundsEnabled) return;
-    SystemSound.play(SystemSoundType.click);
+    if (!_soundsEnabled || _completionPlayer == null) return;
+    _completionPlayer!.stop();
+    _completionPlayer!.resume();
   }
 
-  /// Reproduce sonido de alerta
   void playAlert() {
     if (!_soundsEnabled) return;
     SystemSound.play(SystemSoundType.alert);
@@ -108,7 +165,7 @@ class SoundService {
 
 /// Trigger haptic y sonido combinados para completar hábito
 void triggerCompletionFeedback() {
-  triggerHaptic(HapticType.success);
+  HapticFeedback.mediumImpact();
   SoundService().playSuccess();
 }
 
@@ -126,7 +183,8 @@ class PressableScale extends StatefulWidget {
   final HapticType? hapticType;
 
   const PressableScale({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.onTap,
     this.onLongPress,
     this.scaleDown = 0.95,
@@ -153,10 +211,12 @@ class _PressableScaleState extends State<PressableScale>
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: widget.scaleDown,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ),);
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
   }
 
   @override
@@ -209,7 +269,8 @@ class ShakeWidget extends StatefulWidget {
   final VoidCallback? onShakeComplete;
 
   const ShakeWidget({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.shake = false,
     this.onShakeComplete,
   });
@@ -236,10 +297,12 @@ class ShakeWidgetState extends State<ShakeWidget>
       TweenSequenceItem(tween: Tween(begin: -10, end: 10), weight: 2),
       TweenSequenceItem(tween: Tween(begin: 10, end: -10), weight: 2),
       TweenSequenceItem(tween: Tween(begin: -10, end: 0), weight: 1),
-    ]).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ),);
+    ]).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -278,390 +341,6 @@ class ShakeWidgetState extends State<ShakeWidget>
         );
       },
       child: widget.child,
-    );
-  }
-}
-
-// =============================================================================
-// PULSE ANIMATION (Para llamar atención)
-// =============================================================================
-
-/// Widget con animación de pulso para llamar la atención
-class PulseWidget extends StatefulWidget {
-  final Widget child;
-  final bool pulse;
-  final Duration duration;
-  final double maxScale;
-
-  const PulseWidget({
-    required this.child, super.key,
-    this.pulse = true,
-    this.duration = const Duration(milliseconds: 1000),
-    this.maxScale = 1.05,
-  });
-
-  @override
-  State<PulseWidget> createState() => _PulseWidgetState();
-}
-
-class _PulseWidgetState extends State<PulseWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    _animation = Tween<double>(begin: 1.0, end: widget.maxScale).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    if (widget.pulse) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(PulseWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.pulse && !_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    } else if (!widget.pulse && _controller.isAnimating) {
-      _controller.stop();
-      _controller.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.pulse) return widget.child;
-
-    return ScaleTransition(
-      scale: _animation,
-      child: widget.child,
-    );
-  }
-}
-
-// =============================================================================
-// GLOW EFFECT
-// =============================================================================
-
-/// Widget con efecto de glow animado
-class GlowingWidget extends StatefulWidget {
-  final Widget child;
-  final Color glowColor;
-  final bool glow;
-  final double blurRadius;
-  final double spreadRadius;
-
-  const GlowingWidget({
-    required this.child, required this.glowColor, super.key,
-    this.glow = true,
-    this.blurRadius = 20,
-    this.spreadRadius = 2,
-  });
-
-  @override
-  State<GlowingWidget> createState() => _GlowingWidgetState();
-}
-
-class _GlowingWidgetState extends State<GlowingWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _animation = Tween<double>(begin: 0.3, end: 0.8).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    if (widget.glow) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(GlowingWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.glow && !_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    } else if (!widget.glow && _controller.isAnimating) {
-      _controller.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.glow) return widget.child;
-
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: widget.glowColor.withValues(alpha: _animation.value),
-                blurRadius: widget.blurRadius,
-                spreadRadius: widget.spreadRadius,
-              ),
-            ],
-          ),
-          child: child,
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-// =============================================================================
-// SUCCESS CHECKMARK ANIMATION
-// =============================================================================
-
-/// Animación de checkmark para éxito
-class AnimatedCheckmark extends StatefulWidget {
-  final double size;
-  final Color color;
-  final Duration duration;
-  final VoidCallback? onComplete;
-
-  const AnimatedCheckmark({
-    super.key,
-    this.size = 60,
-    this.color = Colors.green,
-    this.duration = const Duration(milliseconds: 500),
-    this.onComplete,
-  });
-
-  @override
-  State<AnimatedCheckmark> createState() => _AnimatedCheckmarkState();
-}
-
-class _AnimatedCheckmarkState extends State<AnimatedCheckmark>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _checkAnimation;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-
-    _checkAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-      ),
-    );
-
-    _scaleAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 0.8, end: 1.1).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 60,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.1, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)),
-        weight: 40,
-      ),
-    ]).animate(_controller);
-
-    _controller.forward().then((_) {
-      if (mounted) widget.onComplete?.call();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _scaleAnimation.value,
-          child: Container(
-            width: widget.size,
-            height: widget.size,
-            decoration: BoxDecoration(
-              color: widget.color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: widget.color.withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  spreadRadius: 3,
-                ),
-              ],
-            ),
-            child: CustomPaint(
-              painter: _CheckmarkPainter(
-                progress: _checkAnimation.value,
-                color: Colors.white,
-                strokeWidth: widget.size * 0.1,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CheckmarkPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final double strokeWidth;
-
-  _CheckmarkPainter({
-    required this.progress,
-    required this.color,
-    required this.strokeWidth,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final checkSize = size.width * 0.35;
-
-    // Puntos del checkmark
-    final start = Offset(center.dx - checkSize * 0.5, center.dy);
-    final middle = Offset(center.dx - checkSize * 0.1, center.dy + checkSize * 0.4);
-    final end = Offset(center.dx + checkSize * 0.5, center.dy - checkSize * 0.3);
-
-    final path = Path();
-
-    if (progress <= 0.5) {
-      // Primera línea (de start a middle)
-      final t = progress * 2;
-      final currentPoint = Offset.lerp(start, middle, t)!;
-      path.moveTo(start.dx, start.dy);
-      path.lineTo(currentPoint.dx, currentPoint.dy);
-    } else {
-      // Primera línea completa
-      path.moveTo(start.dx, start.dy);
-      path.lineTo(middle.dx, middle.dy);
-
-      // Segunda línea (de middle a end)
-      final t = (progress - 0.5) * 2;
-      final currentPoint = Offset.lerp(middle, end, t)!;
-      path.lineTo(currentPoint.dx, currentPoint.dy);
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_CheckmarkPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
-
-// =============================================================================
-// THEME TRANSITION
-// =============================================================================
-
-/// Transición suave entre temas claro/oscuro
-class ThemeTransitionOverlay extends StatefulWidget {
-  final Widget child;
-  final bool isDark;
-
-  const ThemeTransitionOverlay({
-    required this.child, required this.isDark, super.key,
-  });
-
-  @override
-  State<ThemeTransitionOverlay> createState() => _ThemeTransitionOverlayState();
-}
-
-class _ThemeTransitionOverlayState extends State<ThemeTransitionOverlay>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  bool? _previousIsDark;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _previousIsDark = widget.isDark;
-  }
-
-  @override
-  void didUpdateWidget(ThemeTransitionOverlay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isDark != _previousIsDark) {
-      _controller.forward(from: 0).then((_) {
-        if (mounted) _previousIsDark = widget.isDark;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Stack(
-          children: [
-            widget.child,
-            if (_controller.isAnimating)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    color: (_previousIsDark ?? false ? Colors.white : Colors.black)
-                        .withValues(alpha: (1 - _controller.value) * 0.3),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }

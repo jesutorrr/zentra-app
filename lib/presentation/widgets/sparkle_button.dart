@@ -11,7 +11,8 @@ class SparkleButton extends StatefulWidget {
   final double size;
 
   const SparkleButton({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.onPressed,
     this.sparkleColor = Colors.amber,
     this.showSparkles = true,
@@ -32,7 +33,7 @@ class _SparkleButtonState extends State<SparkleButton>
   @override
   void initState() {
     super.initState();
-    
+
     _sparkleController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
@@ -45,12 +46,14 @@ class _SparkleButtonState extends State<SparkleButton>
 
     // Generate sparkles
     for (int i = 0; i < 6; i++) {
-      _sparkles.add(_Sparkle(
-        angle: (i / 6) * 2 * pi,
-        distance: 0.6 + _random.nextDouble() * 0.4,
-        size: 3 + _random.nextDouble() * 3,
-        delay: _random.nextDouble(),
-      ),);
+      _sparkles.add(
+        _Sparkle(
+          angle: (i / 6) * 2 * pi,
+          distance: 0.6 + _random.nextDouble() * 0.4,
+          size: 3 + _random.nextDouble() * 3,
+          delay: _random.nextDouble(),
+        ),
+      );
     }
   }
 
@@ -83,7 +86,8 @@ class _SparkleButtonState extends State<SparkleButton>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: widget.sparkleColor.withValues(alpha: 0.3 * _pulseController.value),
+                          color: widget.sparkleColor
+                              .withValues(alpha: 0.3 * _pulseController.value),
                           blurRadius: 20,
                           spreadRadius: 5,
                         ),
@@ -92,7 +96,7 @@ class _SparkleButtonState extends State<SparkleButton>
                   );
                 },
               ),
-            
+
             // Sparkles
             if (widget.showSparkles)
               AnimatedBuilder(
@@ -108,7 +112,7 @@ class _SparkleButtonState extends State<SparkleButton>
                   );
                 },
               ),
-            
+
             // Main button content
             widget.child,
           ],
@@ -153,17 +157,21 @@ class _SparklesPainter extends CustomPainter {
       final adjustedProgress = (progress + sparkle.delay) % 1.0;
       final angle = sparkle.angle + progress * 2 * pi;
       final distance = maxRadius * sparkle.distance;
-      
+
       final x = center.dx + cos(angle) * distance;
       final y = center.dy + sin(angle) * distance;
-      
+
       // Twinkle effect
       final twinkle = (sin(adjustedProgress * 4 * pi) + 1) / 2;
       final opacity = 0.3 + twinkle * 0.7;
-      
+
       // Draw 4-point star
-      _drawStar(canvas, Offset(x, y), sparkle.size * (0.5 + twinkle * 0.5), 
-          color.withValues(alpha: opacity),);
+      _drawStar(
+        canvas,
+        Offset(x, y),
+        sparkle.size * (0.5 + twinkle * 0.5),
+        color.withValues(alpha: opacity),
+      );
     }
   }
 
@@ -173,7 +181,7 @@ class _SparklesPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final path = Path();
-    
+
     // 4-point star
     path.moveTo(center.dx, center.dy - size);
     path.lineTo(center.dx + size * 0.3, center.dy - size * 0.3);
@@ -186,7 +194,7 @@ class _SparklesPainter extends CustomPainter {
     path.close();
 
     canvas.drawPath(path, paint);
-    
+
     // Add glow
     final glowPaint = Paint()
       ..color = color.withValues(alpha: 0.3)
@@ -209,7 +217,8 @@ class EpicCelebration extends StatefulWidget {
   final VoidCallback? onComplete;
 
   const EpicCelebration({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.celebrate = false,
     this.primaryColor = Colors.amber,
     this.onComplete,
@@ -230,7 +239,7 @@ class _EpicCelebrationState extends State<EpicCelebration>
   @override
   void initState() {
     super.initState();
-    
+
     _burstController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -261,16 +270,18 @@ class _EpicCelebrationState extends State<EpicCelebration>
     setState(() {
       _isAnimating = true;
       _stars.clear();
-      
+
       // Generate burst stars
       for (int i = 0; i < 12; i++) {
-        _stars.add(_CelebrationStar(
-          angle: (i / 12) * 2 * pi + _random.nextDouble() * 0.3,
-          velocity: 0.8 + _random.nextDouble() * 0.4,
-          size: 8 + _random.nextDouble() * 8,
-          rotationSpeed: (_random.nextDouble() - 0.5) * 4,
-          color: _getStarColor(),
-        ),);
+        _stars.add(
+          _CelebrationStar(
+            angle: (i / 12) * 2 * pi + _random.nextDouble() * 0.3,
+            velocity: 0.8 + _random.nextDouble() * 0.4,
+            size: 8 + _random.nextDouble() * 8,
+            rotationSpeed: (_random.nextDouble() - 0.5) * 4,
+            color: _getStarColor(),
+          ),
+        );
       }
     });
 
@@ -315,7 +326,7 @@ class _EpicCelebrationState extends State<EpicCelebration>
             );
           },
         ),
-        
+
         // Burst ring
         if (_isAnimating)
           AnimatedBuilder(
@@ -324,7 +335,7 @@ class _EpicCelebrationState extends State<EpicCelebration>
               final progress = _burstController.value;
               final opacity = (1 - progress).clamp(0.0, 1.0);
               final scale = 1 + progress * 2;
-              
+
               return Transform.scale(
                 scale: scale,
                 child: Container(
@@ -333,7 +344,8 @@ class _EpicCelebrationState extends State<EpicCelebration>
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: widget.primaryColor.withValues(alpha: opacity * 0.8),
+                      color:
+                          widget.primaryColor.withValues(alpha: opacity * 0.8),
                       width: 3 * (1 - progress),
                     ),
                   ),
@@ -341,7 +353,7 @@ class _EpicCelebrationState extends State<EpicCelebration>
               );
             },
           ),
-        
+
         // Stars burst
         if (_isAnimating)
           AnimatedBuilder(
@@ -395,19 +407,25 @@ class _CelebrationPainter extends CustomPainter {
       final easedProgress = Curves.easeOutCubic.transform(progress);
       final distance = easedProgress * 80 * star.velocity;
       final opacity = (1 - progress).clamp(0.0, 1.0);
-      
+
       final x = center.dx + cos(star.angle) * distance;
-      final y = center.dy + sin(star.angle) * distance - (easedProgress * 20); // slight upward drift
-      
+      final y = center.dy +
+          sin(star.angle) * distance -
+          (easedProgress * 20); // slight upward drift
+
       final rotation = progress * star.rotationSpeed * pi;
-      
+
       canvas.save();
       canvas.translate(x, y);
       canvas.rotate(rotation);
-      
-      _drawStar(canvas, Offset.zero, star.size * (1 - progress * 0.5), 
-          star.color.withValues(alpha: opacity),);
-      
+
+      _drawStar(
+        canvas,
+        Offset.zero,
+        star.size * (1 - progress * 0.5),
+        star.color.withValues(alpha: opacity),
+      );
+
       canvas.restore();
     }
   }
@@ -418,7 +436,7 @@ class _CelebrationPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final path = Path();
-    
+
     // 4-point star
     path.moveTo(center.dx, center.dy - size);
     path.lineTo(center.dx + size * 0.25, center.dy - size * 0.25);
@@ -435,180 +453,6 @@ class _CelebrationPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CelebrationPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
-
-/// Shimmer effect para textos o elementos especiales
-class ShimmerText extends StatefulWidget {
-  final String text;
-  final TextStyle? style;
-  final Color shimmerColor;
-
-  const ShimmerText({
-    required this.text, super.key,
-    this.style,
-    this.shimmerColor = Colors.white,
-  });
-
-  @override
-  State<ShimmerText> createState() => _ShimmerTextState();
-}
-
-class _ShimmerTextState extends State<ShimmerText>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return ShaderMask(
-          shaderCallback: (bounds) {
-            return LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                widget.style?.color ?? Colors.black,
-                widget.shimmerColor,
-                widget.style?.color ?? Colors.black,
-              ],
-              stops: [
-                (_controller.value - 0.3).clamp(0.0, 1.0),
-                _controller.value,
-                (_controller.value + 0.3).clamp(0.0, 1.0),
-              ],
-            ).createShader(bounds);
-          },
-          child: Text(
-            widget.text,
-            style: widget.style,
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Animated checkmark con efecto de dibujo
-class AnimatedCheckmark extends StatefulWidget {
-  final double size;
-  final Color color;
-  final Duration duration;
-  final VoidCallback? onComplete;
-
-  const AnimatedCheckmark({
-    super.key,
-    this.size = 48,
-    this.color = Colors.green,
-    this.duration = const Duration(milliseconds: 500),
-    this.onComplete,
-  });
-
-  @override
-  State<AnimatedCheckmark> createState() => _AnimatedCheckmarkState();
-}
-
-class _AnimatedCheckmarkState extends State<AnimatedCheckmark>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    
-    _controller.forward().then((_) => widget.onComplete?.call());
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          size: Size(widget.size, widget.size),
-          painter: _CheckmarkPainter(
-            progress: Curves.easeOutCubic.transform(_controller.value),
-            color: widget.color,
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CheckmarkPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
-  _CheckmarkPainter({
-    required this.progress,
-    required this.color,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = size.width * 0.12
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    
-    // Checkmark points
-    final start = Offset(size.width * 0.2, size.height * 0.5);
-    final middle = Offset(size.width * 0.4, size.height * 0.7);
-    final end = Offset(size.width * 0.8, size.height * 0.3);
-
-    // Calculate how much of the path to draw
-    if (progress <= 0.5) {
-      // First stroke (down)
-      final t = progress * 2;
-      final current = Offset.lerp(start, middle, t)!;
-      path.moveTo(start.dx, start.dy);
-      path.lineTo(current.dx, current.dy);
-    } else {
-      // First stroke complete + second stroke (up)
-      path.moveTo(start.dx, start.dy);
-      path.lineTo(middle.dx, middle.dy);
-      
-      final t = (progress - 0.5) * 2;
-      final current = Offset.lerp(middle, end, t)!;
-      path.lineTo(current.dx, current.dy);
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _CheckmarkPainter oldDelegate) {
     return oldDelegate.progress != progress;
   }
 }

@@ -17,7 +17,7 @@ Future<bool?> showConfirmDialog({
   bool isDangerous = false,
 }) {
   HapticFeedback.mediumImpact();
-  
+
   return showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
@@ -33,7 +33,7 @@ Future<bool?> showConfirmDialog({
         curve: Curves.easeOutBack,
         reverseCurve: Curves.easeIn,
       );
-      
+
       return BackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: 8 * animation.value,
@@ -73,7 +73,8 @@ class _ConfirmDialogContent extends StatelessWidget {
     required this.message,
     required this.confirmText,
     required this.cancelText,
-    required this.isDangerous, this.confirmColor,
+    required this.isDangerous,
+    this.confirmColor,
     this.icon,
   });
 
@@ -82,23 +83,27 @@ class _ConfirmDialogContent extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final accentColor = confirmColor ?? 
-        (isDangerous ? colorScheme.error : colorScheme.primary);
+    final accentColor =
+        confirmColor ?? (isDangerous ? colorScheme.error : colorScheme.primary);
     return Center(
       child: Container(
         margin: const EdgeInsets.all(24),
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
-          color: isDark ? Colors.black : Colors.white,
+          color: isDark
+              ? Colors.black.withValues(alpha: 0.75)
+              : Colors.white.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(28),
           border: Border.all(
-            color: accentColor.withValues(alpha: isDark ? 0.3 : 0.2),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : accentColor.withValues(alpha: 0.15),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
@@ -137,9 +142,10 @@ class _ConfirmDialogContent extends StatelessWidget {
                       ),
                     ),
                     child: Icon(
-                      icon ?? (isDangerous 
-                          ? Icons.warning_rounded 
-                          : Icons.help_outline_rounded),
+                      icon ??
+                          (isDangerous
+                              ? Icons.warning_rounded
+                              : Icons.help_outline_rounded),
                       size: 32,
                       color: accentColor,
                     ),
@@ -156,7 +162,7 @@ class _ConfirmDialogContent extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Mensaje
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -169,7 +175,7 @@ class _ConfirmDialogContent extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
-            
+
             // Botones
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -228,7 +234,11 @@ class _ConfirmDialogContent extends StatelessWidget {
 }
 
 /// Muestra un snackbar mejorado con animación
-void showSuccessSnackbar(BuildContext context, String message, {IconData? icon}) {
+void showSuccessSnackbar(
+  BuildContext context,
+  String message, {
+  IconData? icon,
+}) {
   HapticFeedback.lightImpact();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -327,36 +337,47 @@ Future<T?> showAnimatedBottomSheet<T>({
     builder: (context) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final colorScheme = Theme.of(context).colorScheme;
-      return Container(
-        decoration: BoxDecoration(
-          color: isDark ? Colors.black : Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(
-            color: colorScheme.primary.withValues(alpha: isDark ? 0.3 : 0.2),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
+      return ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.7)
+                  : Colors.white.withValues(alpha: 0.85),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : colorScheme.primary.withValues(alpha: 0.12),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 30,
+                  offset: const Offset(0, -8),
+                ),
+              ],
             ),
-            builder(context),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                builder(context),
+              ],
+            ),
+          ),
         ),
       );
     },

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:animations/animations.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import '../../domain/models.dart';
-import '../../application/habit_provider.dart';
+import '../design_tokens.dart';
 import '../theme.dart';
+import '../motion_policy.dart';
 import '../habit_form_screen.dart';
 import '../utils/feedback_utils.dart';
 import '../utils/dialogs.dart';
@@ -17,18 +17,32 @@ import 'celebration_particles.dart';
 /// Muestra icono de categoría, título, etiquetas y racha
 class HabitCard extends StatefulWidget {
   final Habit habit;
-  final HabitProvider provider;
+  final bool isCompleted;
+  final int streak;
+  final Future<void> Function() onToggle;
+  final Future<void> Function() onArchive;
+  final Future<void> Function() onDelete;
   final bool isDark;
+  final bool salviaCompact;
 
   const HabitCard({
-    required this.habit, required this.provider, required this.isDark, super.key,
+    required this.habit,
+    required this.isCompleted,
+    required this.streak,
+    required this.onToggle,
+    required this.onArchive,
+    required this.onDelete,
+    required this.isDark,
+    this.salviaCompact = false,
+    super.key,
   });
 
   @override
   State<HabitCard> createState() => _HabitCardState();
 }
 
-class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, DebounceMixin {
+class _HabitCardState extends State<HabitCard>
+    with TickerProviderStateMixin, DebounceMixin {
   late AnimationController _controller;
   late AnimationController _pulseController;
   late AnimationController _bloomController;
@@ -39,6 +53,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
   Offset? _touchLocalPosition;
   Timer? _bloomDelayTimer;
   bool _longPressMenuShown = false;
+  bool _allowsDecorativeMotion = true;
 
   @override
   void initState() {
@@ -50,20 +65,37 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
     _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
-    
+
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _pulseAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.05), weight: 50),
-      TweenSequenceItem(tween: Tween(begin: 1.05, end: 1.0), weight: 50),
-    ]).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.elasticOut),
+    );
 
     _bloomController = AnimationController(
       duration: const Duration(milliseconds: 350),
       vsync: this,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _allowsDecorativeMotion = context.motionPolicy.allowsDecorativeMotion;
+    if (_allowsDecorativeMotion) return;
+
+    _bloomDelayTimer?.cancel();
+    _controller
+      ..stop()
+      ..value = 0;
+    _pulseController
+      ..stop()
+      ..value = 0;
+    _bloomController
+      ..stop()
+      ..value = 0;
   }
 
   @override
@@ -79,32 +111,29 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
     // Prevent multiple rapid taps
     if (_isTapping) return;
     _isTapping = true;
-    
+
     try {
-      final wasCompleted = widget.provider.isHabitCompletedToday(widget.habit.id);
-      
-      // Animate card (bounce) - no await para que sea concurrente
-      _controller.forward().then((_) => _controller.reverse());
-      
-      // Haptic feedback premium
-      if (!wasCompleted) {
-        // Heavy impact para completado (sensación física sólida como cerrar puerta de coche de lujo)
-        HapticFeedback.heavyImpact();
-        
-        // Pulse celebration después del bounce
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) _pulseController.forward(from: 0);
-        });
-        
-        // Mostrar partículas de celebración
-        _showCelebrationParticles();
-      } else {
-        // Light impact para desmarcar
-        HapticFeedback.lightImpact();
+      final wasCompleted = widget.isCompleted;
+      final allowsMotion = _allowsDecorativeMotion;
+
+      if (allowsMotion) {
+        _controller.forward().then((_) => _controller.reverse());
       }
-      
+
+      if (!wasCompleted) {
+        if (allowsMotion) {
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (mounted) _pulseController.forward(from: 0);
+          });
+          _showCelebrationParticles();
+        }
+      }
+
       // Toggle habit
-      await widget.provider.toggleHabitToday(widget.habit.id);
+      await widget.onToggle();
+      if (!wasCompleted) {
+        triggerCompletionFeedback();
+      }
     } finally {
       // Allow next tap after a short delay
       await Future.delayed(const Duration(milliseconds: 300));
@@ -135,6 +164,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
     _longPressMenuShown = false;
     _touchLocalPosition = event.localPosition;
     _bloomDelayTimer?.cancel();
+    if (!context.motionPolicy.allowsDecorativeMotion) return;
     _bloomDelayTimer = Timer(const Duration(milliseconds: 150), () {
       if (mounted) _bloomController.forward(from: 0);
     });
@@ -154,7 +184,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
 
   // Navegar a editar usando OpenContainer callback
   VoidCallback? _openContainerCallback;
-  
+
   void _navigateToEdit() {
     triggerHaptic(HapticType.medium);
     // Usar OpenContainer callback si está disponible
@@ -166,7 +196,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
   // Archivar hábito
   Future<void> _archiveHabit() async {
     triggerHaptic(HapticType.medium);
-    await widget.provider.toggleArchive(widget.habit.id);
+    await widget.onArchive();
     if (mounted) {
       showSuccessSnackbar(context, 'Hábito archivado');
     }
@@ -177,64 +207,141 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
     final confirm = await showConfirmDialog(
       context: context,
       title: '¿Eliminar hábito?',
-      message: 'Se eliminará "${widget.habit.title}" y todo su historial. Esta acción no se puede deshacer.',
+      message:
+          'Se eliminará "${widget.habit.title}" y todo su historial. Esta acción no se puede deshacer.',
       confirmText: 'Eliminar',
       cancelText: 'Cancelar',
       icon: Icons.delete_rounded,
       isDangerous: true,
     );
-    
+
     if (confirm == true && mounted) {
       triggerHaptic(HapticType.warning);
-      await widget.provider.deleteHabit(widget.habit.id);
+      await widget.onDelete();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildSalviaCard({
+    required BuildContext context,
+    required bool isCompleted,
+    required int streak,
+    required Color categoryColor,
+    required IconData categoryIcon,
+  }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isCompleted = widget.provider.isHabitCompletedToday(widget.habit.id);
-    final streak = widget.provider.getHabitStreak(widget.habit.id);
-    final categoryColor = AppTheme.getCategoryColor(widget.habit.category, colorScheme);
-    final categoryIcon = AppTheme.getCategoryIcon(widget.habit.category);
+    final palette = context.zentraPalette;
+    final usesAccessibleTitleLayout =
+        MediaQuery.textScalerOf(context).scale(16) > 22;
+    final meta = [
+      _getSalviaFrequencyLabel(widget.habit),
+      if (streak > 0) 'racha $streak',
+    ].join(' · ');
 
-    // Card content (reusable for context menu preview)
-    final cardContent = Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias, // Ensure content respects border radius
-      shape: RoundedRectangleBorder(
+    return DecoratedBox(
+      key: ValueKey('salvia-habit-card-${widget.habit.id}'),
+      decoration: BoxDecoration(
+        color: palette.surfaceCard,
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: categoryColor.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        boxShadow: theme.brightness == Brightness.dark
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x0D1B2523),
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
+                ),
+              ],
       ),
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                _CategoryIcon(
-                  color: categoryColor,
-                  icon: categoryIcon,
-                  heroTag: 'habit_icon_${widget.habit.id}',
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _HabitInfo(
-                    habit: widget.habit,
-                    isCompleted: isCompleted,
-                    streak: streak,
-                    categoryColor: categoryColor,
+                Semantics(
+                  key: ValueKey('habit-category-${widget.habit.id}'),
+                  image: true,
+                  label: 'Categoría ${widget.habit.category.label}',
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.getCategoryTint(
+                        widget.habit.category,
+                        theme.brightness,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      categoryIcon,
+                      color: categoryColor,
+                      size: 21,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        key: ValueKey('habit-title-${widget.habit.id}'),
+                        widget.habit.title,
+                        maxLines: usesAccessibleTitleLayout ? null : 2,
+                        overflow: usesAccessibleTitleLayout
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color:
+                              isCompleted ? palette.inkDisabled : palette.ink,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                          decorationColor: palette.inkDisabled,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: isCompleted
+                              ? palette.inkDisabled
+                              : palette.inkMuted,
+                          fontFeatures: const [
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
                 KeyedSubtree(
                   key: _checkboxKey,
-                  child: _CompletionCheckbox(
-                    isCompleted: isCompleted,
-                    accentColor: categoryColor,
+                  child: Semantics(
+                    key: ValueKey('habit-completion-${widget.habit.id}'),
+                    container: true,
+                    explicitChildNodes: true,
+                    button: true,
+                    toggled: isCompleted,
+                    label: isCompleted
+                        ? 'Marcar ${widget.habit.title} como pendiente'
+                        : 'Marcar ${widget.habit.title} como completado',
+                    onTap: _handleTap,
+                    child: SizedBox.square(
+                      dimension: 48,
+                      child: Center(
+                        child: ExcludeSemantics(
+                          child: _SalviaCompletionCheckbox(
+                            isCompleted: isCompleted,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -245,7 +352,8 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
               child: AnimatedBuilder(
                 animation: _bloomController,
                 builder: (context, _) {
-                  if (_bloomController.value <= 0 || _touchLocalPosition == null) {
+                  if (_bloomController.value <= 0 ||
+                      _touchLocalPosition == null) {
                     return const SizedBox.shrink();
                   }
                   return CustomPaint(
@@ -262,6 +370,115 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
         ],
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isCompleted = widget.isCompleted;
+    final streak = widget.streak;
+    final categoryColor = widget.salviaCompact
+        ? AppTheme.getSalviaCategoryColor(
+            widget.habit.category,
+            theme.brightness,
+          )
+        : AppTheme.getCategoryColor(widget.habit.category, colorScheme);
+    final categoryIcon = AppTheme.getCategoryIcon(widget.habit.category);
+
+    // Card content (reusable for context menu preview)
+    final cardContent = widget.salviaCompact
+        ? _buildSalviaCard(
+            context: context,
+            isCompleted: isCompleted,
+            streak: streak,
+            categoryColor: categoryColor,
+            categoryIcon: categoryIcon,
+          )
+        : Card(
+            margin: EdgeInsets.zero,
+            clipBehavior:
+                Clip.antiAlias, // Ensure content respects border radius
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: categoryColor.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      _CategoryIcon(
+                        color: categoryColor,
+                        icon: categoryIcon,
+                        heroTag: 'habit_icon_${widget.habit.id}',
+                        habitId: widget.habit.id,
+                        label: widget.habit.category.label,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _HabitInfo(
+                          habit: widget.habit,
+                          isCompleted: isCompleted,
+                          streak: streak,
+                          categoryColor: categoryColor,
+                        ),
+                      ),
+                      KeyedSubtree(
+                        key: _checkboxKey,
+                        child: Semantics(
+                          key: ValueKey('habit-completion-${widget.habit.id}'),
+                          container: true,
+                          explicitChildNodes: true,
+                          button: true,
+                          toggled: isCompleted,
+                          label: isCompleted
+                              ? 'Marcar ${widget.habit.title} como pendiente'
+                              : 'Marcar ${widget.habit.title} como completado',
+                          onTap: _handleTap,
+                          child: SizedBox.square(
+                            dimension: 48,
+                            child: Center(
+                              child: ExcludeSemantics(
+                                child: _CompletionCheckbox(
+                                  isCompleted: isCompleted,
+                                  accentColor: categoryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: _bloomController,
+                      builder: (context, _) {
+                        if (_bloomController.value <= 0 ||
+                            _touchLocalPosition == null) {
+                          return const SizedBox.shrink();
+                        }
+                        return CustomPaint(
+                          painter: _RadialBloomPainter(
+                            center: _touchLocalPosition!,
+                            progress: _bloomController.value,
+                            color: categoryColor,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
 
     // OpenContainer para transición fluida card → form
     return OpenContainer<bool>(
@@ -283,7 +500,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
       closedBuilder: (context, openContainer) {
         // Guardar callback para usar desde context menu
         _openContainerCallback = openContainer;
-        
+
         return AnimatedBuilder(
           animation: Listenable.merge([_scaleAnimation, _pulseAnimation]),
           builder: (context, child) {
@@ -294,7 +511,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
             );
           },
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: EdgeInsets.only(bottom: widget.salviaCompact ? 10 : 12),
             child: Slidable(
               key: Key('habit_${widget.habit.id}'),
               startActionPane: ActionPane(
@@ -307,7 +524,9 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
                     foregroundColor: colorScheme.onPrimaryContainer,
                     icon: Icons.edit_rounded,
                     label: 'Editar',
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(20),
+                    ),
                   ),
                 ],
               ),
@@ -328,7 +547,9 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
                     foregroundColor: Colors.white,
                     icon: Icons.delete_rounded,
                     label: 'Eliminar',
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                    borderRadius: const BorderRadius.horizontal(
+                      right: Radius.circular(20),
+                    ),
                   ),
                 ],
               ),
@@ -340,7 +561,6 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
                   onLongPress: () {
                     _bloomDelayTimer?.cancel();
                     _longPressMenuShown = true;
-                    triggerHaptic(HapticType.medium);
                     _showContextMenu(context, isCompleted);
                     Future.delayed(const Duration(milliseconds: 300), () {
                       if (mounted) _bloomController.reverse();
@@ -350,6 +570,7 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: _handleTap,
+                      excludeFromSemantics: true,
                       borderRadius: BorderRadius.circular(20),
                       splashColor: categoryColor.withValues(alpha: 0.15),
                       highlightColor: categoryColor.withValues(alpha: 0.08),
@@ -367,9 +588,9 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
 
   void _showContextMenu(BuildContext context, bool isCompleted) {
     triggerHaptic(HapticType.medium);
-    
+
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     showCupertinoModalPopup(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -455,7 +676,6 @@ class _HabitCardState extends State<HabitCard> with TickerProviderStateMixin, De
       ),
     );
   }
-
 }
 
 /// Icono de categoría del hábito - Con soporte para Hero animation
@@ -463,10 +683,14 @@ class _CategoryIcon extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String? heroTag;
+  final String habitId;
+  final String label;
 
   const _CategoryIcon({
     required this.color,
     required this.icon,
+    required this.habitId,
+    required this.label,
     this.heroTag,
   });
 
@@ -486,13 +710,18 @@ class _CategoryIcon extends StatelessWidget {
       ),
     );
 
-    if (heroTag != null) {
-      return Hero(
-        tag: heroTag!,
-        child: iconWidget,
-      );
-    }
-    return iconWidget;
+    final content = heroTag == null
+        ? iconWidget
+        : Hero(
+            tag: heroTag!,
+            child: iconWidget,
+          );
+    return Semantics(
+      key: ValueKey('habit-category-$habitId'),
+      image: true,
+      label: 'Categoría $label',
+      child: content,
+    );
   }
 }
 
@@ -514,24 +743,28 @@ class _HabitInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final usesAccessibleTitleLayout =
+        MediaQuery.textScalerOf(context).scale(16) > 22;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // FASE 2: Título con más peso
         Text(
+          key: ValueKey('habit-title-${habit.id}'),
           habit.title,
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
-            decoration: isCompleted
-                ? TextDecoration.lineThrough
-                : TextDecoration.none,
+            decoration:
+                isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
             color: isCompleted
                 ? colorScheme.onSurface.opacity50
                 : colorScheme.onSurface,
           ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+          maxLines: usesAccessibleTitleLayout ? null : 2,
+          overflow: usesAccessibleTitleLayout
+              ? TextOverflow.visible
+              : TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -557,8 +790,7 @@ class _HabitInfo extends StatelessWidget {
                 minute: habit.reminderMinute ?? 0,
               ),
             // Streak badge
-            if (streak > 0)
-              _StreakBadge(streak: streak),
+            if (streak > 0) _StreakBadge(streak: streak),
           ],
         ),
       ],
@@ -589,9 +821,9 @@ class _Tag extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w600,
-        ),
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }
@@ -611,7 +843,8 @@ class _ReminderIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final timeStr = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -652,30 +885,33 @@ class _StreakBadge extends StatefulWidget {
   State<_StreakBadge> createState() => _StreakBadgeState();
 }
 
-class _StreakBadgeState extends State<_StreakBadge> 
+class _StreakBadgeState extends State<_StreakBadge>
     with TickerProviderStateMixin {
   late AnimationController _scaleController;
   late AnimationController _fireController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fireAnimation;
   int _previousStreak = 0;
+  bool _allowsDecorativeMotion = true;
 
   @override
   void initState() {
     super.initState();
     _previousStreak = widget.streak;
-    
+
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     _scaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.4).chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(begin: 1.0, end: 1.4)
+            .chain(CurveTween(curve: Curves.easeOut)),
         weight: 40,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 1.4, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)),
+        tween: Tween(begin: 1.4, end: 1.0)
+            .chain(CurveTween(curve: Curves.elasticOut)),
         weight: 60,
       ),
     ]).animate(_scaleController);
@@ -690,10 +926,24 @@ class _StreakBadgeState extends State<_StreakBadge>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _allowsDecorativeMotion = context.motionPolicy.allowsDecorativeMotion;
+    if (_allowsDecorativeMotion) return;
+
+    _scaleController
+      ..stop()
+      ..value = 0;
+    _fireController
+      ..stop()
+      ..value = 0;
+  }
+
+  @override
   void didUpdateWidget(_StreakBadge oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Animar cuando la racha aumenta
-    if (widget.streak > _previousStreak) {
+    if (_allowsDecorativeMotion && widget.streak > _previousStreak) {
       _scaleController.forward(from: 0);
       _fireController.forward(from: 0).then((_) {
         if (mounted) _fireController.reverse();
@@ -712,70 +962,94 @@ class _StreakBadgeState extends State<_StreakBadge>
   @override
   Widget build(BuildContext context) {
     final isBigStreak = widget.streak >= 7;
-    
+    final numberStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppTheme.accentOrange,
+          fontWeight: FontWeight.w700,
+        );
+
+    if (!_allowsDecorativeMotion) {
+      return _buildBadge(
+        isBigStreak: isBigStreak,
+        fireProgress: 0,
+        number: Text('${widget.streak}', style: numberStyle),
+      );
+    }
+
     return AnimatedBuilder(
       animation: Listenable.merge([_scaleAnimation, _fireAnimation]),
       builder: (context, child) {
         return Transform.scale(
           scale: _scaleAnimation.value,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: isBigStreak
-                  ? LinearGradient(
-                      colors: [
-                        AppTheme.accentOrange.withValues(alpha: 0.2),
-                        AppTheme.accentAmber.withValues(alpha: 0.15),
-                      ],
-                    )
-                  : null,
-              color: isBigStreak ? null : AppTheme.accentOrange.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: _fireAnimation.value > 0
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.accentOrange.withValues(alpha: 0.3 * _fireAnimation.value),
-                        blurRadius: 8,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Icono de fuego con efecto de brillo
-                Stack(
-                  children: [
-                    const Icon(
-                      Icons.local_fire_department_rounded,
-                      size: 14,
-                      color: AppTheme.accentOrange,
-                    ),
-                    if (_fireAnimation.value > 0)
-                      Positioned.fill(
-                        child: Icon(
-                          Icons.local_fire_department_rounded,
-                          size: 14,
-                          color: Colors.white.withValues(alpha: 0.5 * _fireAnimation.value),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 4),
-                // Número con animación de salto
-                BouncingNumber(
-                  value: widget.streak,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.accentOrange,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+          child: _buildBadge(
+            isBigStreak: isBigStreak,
+            fireProgress: _fireAnimation.value,
+            number: BouncingNumber(
+              value: widget.streak,
+              style: numberStyle,
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildBadge({
+    required bool isBigStreak,
+    required double fireProgress,
+    required Widget number,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: isBigStreak
+            ? LinearGradient(
+                colors: [
+                  AppTheme.accentOrange.withValues(alpha: 0.2),
+                  AppTheme.accentAmber.withValues(alpha: 0.15),
+                ],
+              )
+            : null,
+        color:
+            isBigStreak ? null : AppTheme.accentOrange.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: fireProgress > 0
+            ? [
+                BoxShadow(
+                  color: AppTheme.accentOrange.withValues(
+                    alpha: 0.3 * fireProgress,
+                  ),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              const Icon(
+                Icons.local_fire_department_rounded,
+                size: 14,
+                color: AppTheme.accentOrange,
+              ),
+              if (fireProgress > 0)
+                Positioned.fill(
+                  child: Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 14,
+                    color: Colors.white.withValues(
+                      alpha: 0.5 * fireProgress,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 4),
+          number,
+        ],
+      ),
     );
   }
 }
@@ -783,6 +1057,51 @@ class _StreakBadgeState extends State<_StreakBadge>
 /// Anillo de progreso que se llena - Diseño OLED minimalista
 /// Pendiente: anillo vacío con borde sutil
 /// Completado: anillo lleno con glow del color de categoría
+class _SalviaCompletionCheckbox extends StatelessWidget {
+  final bool isCompleted;
+
+  const _SalviaCompletionCheckbox({required this.isCompleted});
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.zentraPalette;
+    final allowsMotion = context.motionPolicy.allowsDecorativeMotion;
+    return AnimatedContainer(
+      duration:
+          allowsMotion ? const Duration(milliseconds: 260) : Duration.zero,
+      curve: Curves.easeOutCubic,
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: isCompleted ? palette.brandTeal : Colors.transparent,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isCompleted ? palette.brandTeal : palette.checkBorder,
+          width: 1.5,
+        ),
+      ),
+      child: AnimatedScale(
+        duration:
+            allowsMotion ? const Duration(milliseconds: 220) : Duration.zero,
+        curve: Curves.easeOutBack,
+        scale: isCompleted ? 1 : 0.7,
+        child: AnimatedOpacity(
+          duration:
+              allowsMotion ? const Duration(milliseconds: 160) : Duration.zero,
+          opacity: isCompleted ? 1 : 0,
+          child: Icon(
+            Icons.check_rounded,
+            size: 18,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF00201B)
+                : const Color(0xFFF8F6F0),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CompletionCheckbox extends StatefulWidget {
   final bool isCompleted;
   final Color accentColor;
@@ -805,12 +1124,12 @@ class _CompletionCheckboxState extends State<_CompletionCheckbox>
   void initState() {
     super.initState();
     _wasCompleted = widget.isCompleted;
-    
+
     _fillController = AnimationController(
       duration: const Duration(milliseconds: 650),
       vsync: this,
     );
-    
+
     if (widget.isCompleted) {
       _fillController.value = 1.0;
     }
@@ -820,10 +1139,17 @@ class _CompletionCheckboxState extends State<_CompletionCheckbox>
   void didUpdateWidget(_CompletionCheckbox oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isCompleted && !_wasCompleted) {
-      _fillController.forward(from: 0);
-      triggerCompletionFeedback();
+      if (context.motionPolicy.allowsDecorativeMotion) {
+        _fillController.forward(from: 0);
+      } else {
+        _fillController.value = 1;
+      }
     } else if (!widget.isCompleted && _wasCompleted) {
-      _fillController.reverse();
+      if (context.motionPolicy.allowsDecorativeMotion) {
+        _fillController.reverse();
+      } else {
+        _fillController.value = 0;
+      }
     }
     _wasCompleted = widget.isCompleted;
   }
@@ -843,7 +1169,7 @@ class _CompletionCheckboxState extends State<_CompletionCheckbox>
       animation: _fillController,
       builder: (context, child) {
         final progress = Curves.easeOutCubic.transform(_fillController.value);
-        
+
         final checkProgress = ((progress - 0.6) / 0.4).clamp(0.0, 1.0);
         final checkScale = checkProgress > 0
             ? Curves.elasticOut.transform(checkProgress)
@@ -904,14 +1230,14 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
-    
+
     if (progress < 0.01) {
       final bgPaint = Paint()
         ..color = backgroundColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0
         ..strokeCap = StrokeCap.round;
-      
+
       canvas.drawCircle(center, radius, bgPaint);
     } else {
       // Solid fill inside the ring (fades in after 50% progress)
@@ -922,7 +1248,7 @@ class _RingPainter extends CustomPainter {
           ..style = PaintingStyle.fill;
         canvas.drawCircle(center, radius - strokeWidth / 2, fillPaint);
       }
-      
+
       // Outer glow
       if (glowIntensity > 0.2) {
         final glowPaint = Paint()
@@ -931,7 +1257,7 @@ class _RingPainter extends CustomPainter {
           ..strokeWidth = strokeWidth + 8
           ..strokeCap = StrokeCap.round
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * glowIntensity);
-        
+
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: radius),
           -1.5708,
@@ -940,14 +1266,14 @@ class _RingPainter extends CustomPainter {
           glowPaint,
         );
       }
-      
+
       // Ring stroke
       final progressPaint = Paint()
         ..color = accentColor
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round;
-      
+
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         -1.5708,
@@ -961,8 +1287,8 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RingPainter oldDelegate) {
     return oldDelegate.progress != progress ||
-           oldDelegate.accentColor != accentColor ||
-           oldDelegate.glowIntensity != glowIntensity;
+        oldDelegate.accentColor != accentColor ||
+        oldDelegate.glowIntensity != glowIntensity;
   }
 }
 
@@ -1019,17 +1345,50 @@ class _RadialBloomPainter extends CustomPainter {
 /// Obtiene la etiqueta de frecuencia para un hábito
 String _getFrequencyLabel(Habit habit) {
   if (habit.isOneTime) return 'Única';
-  
+
   final days = habit.frequency.daysOfWeek;
   if (days.length == 7) return 'Diariamente';
-  if (days.length == 5 && 
-      days.contains(1) && days.contains(2) && days.contains(3) && 
-      days.contains(4) && days.contains(5) &&
-      !days.contains(6) && !days.contains(7)) {
+  if (days.length == 5 &&
+      days.contains(1) &&
+      days.contains(2) &&
+      days.contains(3) &&
+      days.contains(4) &&
+      days.contains(5) &&
+      !days.contains(6) &&
+      !days.contains(7)) {
     return 'Semanal';
   }
   if (days.length == 2 && days.contains(6) && days.contains(7)) {
     return 'Fin de Semana';
   }
   return 'Personalizado';
+}
+
+String _getSalviaFrequencyLabel(Habit habit) {
+  if (habit.isOneTime) return 'Única';
+
+  final days = habit.frequency.daysOfWeek;
+  if (days.length == 7) return 'Diario';
+  if (days.length == 5 &&
+      days.contains(1) &&
+      days.contains(2) &&
+      days.contains(3) &&
+      days.contains(4) &&
+      days.contains(5)) {
+    return 'L–V';
+  }
+  if (days.length == 2 && days.contains(6) && days.contains(7)) {
+    return 'Fin de semana';
+  }
+
+  const initials = <int, String>{
+    1: 'L',
+    2: 'M',
+    3: 'X',
+    4: 'J',
+    5: 'V',
+    6: 'S',
+    7: 'D',
+  };
+  return days.map((day) => initials[day]).whereType<String>().join(' · ');
 }
