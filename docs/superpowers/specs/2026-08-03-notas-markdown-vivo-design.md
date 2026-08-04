@@ -58,9 +58,13 @@ palabra destruye la confianza de forma permanente.
 - `body` no cambia de formato. `formatVersion` se queda en 1.
 - El parser vive en `lib/domain/markdown_document.dart`, es Dart puro y no
   importa Flutter.
-- Ciclo completo idempotente, verificado por tests:
-  `parse(serialize(parse(x))) == parse(x)` y `serialize(parse(x)) == x` para
-  todo el corpus de prueba.
+- Ciclo completo verificado por tests, con tres garantías separadas:
+  1. Fidelidad de bytes: `serialize(parse(x)) == x` para todo el corpus. Se
+     logra guardando en cada bloque el espaciado y el marcador literales del
+     origen, en lugar de normalizarlos.
+  2. Idempotencia: `parse(serialize(parse(x))) == parse(x)`.
+  3. Única normalización permitida en todo el sistema: `[X]` se escribe como
+     `[x]`. Cualquier otra reescritura del origen es un defecto.
 - Todo lo que el parser no reconozca se conserva en un bloque crudo que guarda
   su línea intacta y la devuelve tal cual al serializar. Tablas, imágenes, HTML
   o cualquier extensión futura no se estilizan, pero jamás se corrompen.
@@ -80,8 +84,8 @@ palabra destruye la confianza de forma permanente.
 | --- | --- | --- |
 | `heading` | `#`, `##`, `###` | Niveles 1 a 3 |
 | `paragraph` | texto | Bloque por defecto |
-| `bulletItem` | `- `, `* ` | Se normaliza a `- ` al serializar |
-| `numberedItem` | `1. ` | Renumeración automática al renderizar |
+| `bulletItem` | `- `, `* ` | El marcador del origen se conserva tal cual |
+| `numberedItem` | `1. ` | Se renumera al renderizar, nunca en el origen |
 | `checkItem` | `- [ ] `, `- [x] ` | Casilla real tocable |
 | `quote` | `> ` | |
 | `divider` | `---` | |
