@@ -11,10 +11,10 @@ import 'note_block_view.dart';
 /// Zero width space kept in front of the active field's text.
 ///
 /// iOS and Android soft keyboards emit no key event for Backspace, so the only
-/// trace of one pressed at offset zero is this character disappearing. It is
-/// stripped again on the way to the document and never reaches a saved note.
+/// trace of one pressed at offset zero is this character disappearing. Exactly
+/// one is inserted, at index zero, and exactly that one is removed again on the
+/// way to the document: a zero width space the user already had is content.
 const _sentinel = '\u200B';
-const _sentinelUnit = 0x200B;
 
 /// Lets the owning screen read and move the caret, for example after a
 /// toolbar command.
@@ -35,6 +35,8 @@ class NoteBlockEditorController extends ChangeNotifier {
   void focusBlock(int index, {int offset = 0}) {
     _state?._requestFocusBlock(index, offset);
   }
+
+  void _caretMoved() => notifyListeners();
 }
 
 /// Renders a note body as blocks, turning the block under the caret into a raw
@@ -269,7 +271,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     if (document.blocks.isEmpty) return;
     _bindTo(document, index, offset);
     _focusNode.requestFocus();
-    widget.onCaretChanged(_caret);
+    _publishCaret(_caret);
   }
 
   void _requestFocusBlock(int index, int offset) {
@@ -293,7 +295,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _focusNode.hasFocus || _activeIndex == null) return;
       setState(() => _activeIndex = null);
-      widget.onCaretChanged(null);
+      _publishCaret(null);
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
@@ -317,7 +319,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
       return;
     }
     _commitField();
-    widget.onCaretChanged(_caret);
+    _publishCaret(_caret);
   }
 
   void _split() {
@@ -353,7 +355,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
       (offset < 0 ? text.length : offset) + _sentinel.length,
     );
     _commitField();
-    widget.onCaretChanged(_caret);
+    _publishCaret(_caret);
   }
 
   /// Writes what the field holds into the document.
@@ -363,23 +365,51 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   MarkdownDocument? _commitField() {
     final index = _activeIndex;
     if (index == null || index >= widget.document.blocks.length) return null;
-    final parsed = MarkdownDocument.parse(_fieldSource()).blocks;
-    if (parsed.length == 1 && parsed.first == widget.document.blocks[index]) {
-      return null;
+    final source = _fieldSource();
+    var blocks = MarkdownDocument.parse(source).blocks;
+    var next = _documentWith(index, blocks);
+    // The same guard the domain puts on splitting and merging. Without it,
+    // typing three backticks into a paragraph turns every block below it into
+    // the body of a fence the user never opened. A raw block keeps the line
+    // exactly as written and cannot swallow its neighbours.
+    if (!_sameBlocks(next, MarkdownDocument.parse(next.serialize()))) {
+      blocks = _literalBlocksFor(source);
+      next = _documentWith(index, blocks);
     }
-    var next = widget.document.replaceBlock(index, parsed.first);
-    for (var i = 1; i < parsed.length; i++) {
-      next = next.insertBlock(index + i, parsed[i]);
-    }
+    if (_sameBlocks(next, widget.document)) return null;
     _boundDocument = next;
     widget.onChanged(next);
-    if (parsed.length > 1) {
+    if (blocks.length > 1) {
       // A multi line paste became several blocks. The caret follows the text
       // so none of it is left stranded behind an inert field.
-      final last = index + parsed.length - 1;
+      final last = index + blocks.length - 1;
       _bindTo(next, last, next.blocks[last].toSourceLine().length);
     }
     return next;
+  }
+
+  /// [widget.document] with the block at [index] replaced by [blocks].
+  MarkdownDocument _documentWith(int index, List<MarkdownBlock> blocks) {
+    var next = widget.document.replaceBlock(index, blocks.first);
+    for (var i = 1; i < blocks.length; i++) {
+      next = next.insertBlock(index + i, blocks[i]);
+    }
+    return next;
+  }
+
+  /// One raw block per line, the shape that round trips verbatim whatever the
+  /// parser would have read differently.
+  static List<MarkdownBlock> _literalBlocksFor(String source) => [
+        for (final line in source.split('\n'))
+          MarkdownBlock(type: MarkdownBlockType.raw, text: line),
+      ];
+
+  static bool _sameBlocks(MarkdownDocument a, MarkdownDocument b) {
+    if (a.blocks.length != b.blocks.length) return false;
+    for (var i = 0; i < a.blocks.length; i++) {
+      if (a.blocks[i] != b.blocks[i]) return false;
+    }
+    return true;
   }
 
   /// Applies a domain transformation and lands the caret exactly where it
@@ -389,7 +419,7 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     _bindTo(edit.document, edit.caret.blockIndex, edit.caret.offset);
     if (!identical(edit.document, previous)) widget.onChanged(edit.document);
     _focusNode.requestFocus();
-    widget.onCaretChanged(_caret);
+    _publishCaret(_caret);
   }
 
   /// Points the field at [index] of [document], with [offset] measured on the
@@ -416,20 +446,27 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     _lastFieldText = text;
   }
 
-  /// The field's text as the document should store it. Every sentinel is
-  /// removed, not just the leading one, so a paste carrying the same character
-  /// cannot smuggle it into a saved note.
-  String _fieldSource() => _fieldController.text.replaceAll(_sentinel, '');
+  void _publishCaret(DocumentCaret? caret) {
+    widget.onCaretChanged(caret);
+    widget.controller?._caretMoved();
+  }
+
+  /// The field's text as the document should store it.
+  ///
+  /// Only the one sentinel this widget put at index zero is removed. Zero width
+  /// spaces arrive in text pasted from the web and carry meaning in Thai and
+  /// Khmer, so every other one is the user's and stays.
+  String _fieldSource() {
+    final text = _fieldController.text;
+    return text.startsWith(_sentinel) ? text.substring(_sentinel.length) : text;
+  }
 
   /// Translates a field offset into one on the block source line.
   int _sourceOffset(int fieldOffset) {
     final text = _fieldController.text;
     final at = _clamp(fieldOffset, text.length);
-    var sentinels = 0;
-    for (var i = 0; i < at; i++) {
-      if (text.codeUnitAt(i) == _sentinelUnit) sentinels++;
-    }
-    return at - sentinels;
+    if (!text.startsWith(_sentinel)) return at;
+    return at <= _sentinel.length ? 0 : at - _sentinel.length;
   }
 
   static int _clamp(int value, int maximum) {
