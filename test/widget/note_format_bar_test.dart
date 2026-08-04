@@ -60,22 +60,35 @@ void main() {
 
   /// Hands the bar a window of exactly [width], which is what decides whether
   /// the block commands stay side by side or collapse into their menu.
-  Widget hostBar(double width, NoteFormatBar bar) => MaterialApp(
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.bottomCenter,
-            child: SizedBox(width: width, child: bar),
+  Widget hostBar(double width, NoteFormatBar bar, {double textScale = 1}) =>
+      MaterialApp(
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(width: width, child: bar),
+              ),
+            ),
           ),
         ),
       );
 
+  /// The bar as an ordinary paragraph leaves it: every command able to act.
   NoteFormatBar wiredBar({
     NoteBlockCommand? activeCommand,
     ValueChanged<NoteBlockCommand>? onCommand,
+    Set<NoteBlockCommand>? availableCommands,
+    bool blockAcceptsNoCommand = false,
   }) =>
       NoteFormatBar(
         visible: true,
         activeCommand: activeCommand,
+        availableCommands: availableCommands ?? NoteBlockCommand.values.toSet(),
+        blockAcceptsNoCommand: blockAcceptsNoCommand,
         onCommand: onCommand ?? (_) {},
         onBold: () {},
         onItalic: () {},
@@ -101,7 +114,11 @@ void main() {
                   onCaretChanged: (value) => setState(() => caret = value),
                 ),
                 const TextField(key: ValueKey('otro-campo')),
-                NoteFormatBar(visible: caret != null, onCommand: (_) {}),
+                NoteFormatBar(
+                  visible: caret != null,
+                  onCommand: (_) {},
+                  availableCommands: NoteBlockCommand.values.toSet(),
+                ),
               ],
             ),
           ),
@@ -129,6 +146,7 @@ void main() {
           body: NoteFormatBar(
             visible: true,
             activeCommand: NoteBlockCommand.checklist,
+            availableCommands: NoteBlockCommand.values.toSet(),
             onCommand: (command) => pressed = command,
           ),
         ),
@@ -150,6 +168,7 @@ void main() {
         home: Scaffold(
           body: NoteFormatBar(
             visible: true,
+            availableCommands: NoteBlockCommand.values.toSet(),
             onCommand: (_) {},
             onBold: () => tapped.add('bold'),
             onItalic: () => tapped.add('italic'),
@@ -182,6 +201,7 @@ void main() {
           body: NoteFormatBar(
             visible: true,
             activeCommand: NoteBlockCommand.quote,
+            availableCommands: NoteBlockCommand.values.toSet(),
             onCommand: (_) {},
             onBold: () {},
             onItalic: () {},
@@ -310,6 +330,197 @@ void main() {
       isSemantics(label: 'Deshacer', isButton: true),
     );
     handle.dispose();
+  });
+
+  // A command the block refuses used to look exactly like one that works, so
+  // the only way to find out was to tap it and watch nothing happen.
+  testWidgets('a command the block refuses is drawn as unavailable', (
+    tester,
+  ) async {
+    var pressed = 0;
+    await tester.pumpWidget(
+      hostBar(
+        744,
+        wiredBar(
+          onCommand: (_) => pressed++,
+          availableCommands: const {
+            NoteBlockCommand.code,
+            NoteBlockCommand.divider,
+          },
+        ),
+      ),
+    );
+
+    final quote = find.byKey(const ValueKey('note-format-quote'));
+    expect(tester.widget<IconButton>(quote).onPressed, isNull);
+    await tester.tap(quote);
+    expect(pressed, 0);
+
+    // The two that can act are untouched, so the bar still offers a way out.
+    for (final name in const ['code', 'divider']) {
+      final live = find.byKey(ValueKey('note-format-$name'));
+      expect(tester.widget<IconButton>(live).onPressed, isNotNull);
+      await tester.tap(live);
+    }
+    expect(pressed, 2);
+  });
+
+  // Dimming is invisible to a screen reader, and "button, dimmed" does not say
+  // that the same command works one block away.
+  testWidgets('a disabled command says it is unavailable out loud', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      hostBar(
+        744,
+        NoteFormatBar(
+          visible: true,
+          activeCommand: NoteBlockCommand.code,
+          availableCommands: const {NoteBlockCommand.divider},
+          onCommand: (_) {},
+          onUndo: () {},
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('note-format-code'))),
+      isSemantics(
+        label: 'Código',
+        hint: 'No disponible en este bloque',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: false,
+      ),
+    );
+    // Bold was never wired, which is the shape of a selection nothing can be
+    // done with, and it has to read the same way.
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('note-format-bold'))),
+      isSemantics(
+        label: 'Negritas',
+        hint: 'No disponible en este bloque',
+        isEnabled: false,
+      ),
+    );
+    // History has its own reason, and it is not the block.
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('note-format-redo'))),
+      isSemantics(label: 'Rehacer', hint: 'No hay nada que rehacer'),
+    );
+    // And the one command that can act still reads as available.
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('note-format-divider'))),
+      isSemantics(label: 'Separador', isButton: true, isEnabled: true),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('the collapsed menu dims the commands the block refuses', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    final pressed = <NoteBlockCommand>[];
+    await tester.pumpWidget(
+      hostBar(
+        390,
+        wiredBar(
+          onCommand: pressed.add,
+          availableCommands: const {NoteBlockCommand.code},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('note-format-block-menu')));
+    await tester.pumpAndSettle();
+
+    final quote = find.byKey(const ValueKey('note-format-menu-quote'));
+    expect(
+      tester.widget<PopupMenuItem<NoteBlockCommand>>(quote).enabled,
+      isFalse,
+    );
+    expect(
+      tester.getSemantics(find.text('Cita')),
+      isSemantics(hint: 'No disponible en este bloque'),
+    );
+    await tester.tap(quote);
+    await tester.pumpAndSettle();
+    expect(pressed, isEmpty);
+
+    // The menu is still open, because nothing was chosen, and the one live
+    // row still answers.
+    final code = find.byKey(const ValueKey('note-format-menu-code'));
+    await tester.ensureVisible(code);
+    await tester.pumpAndSettle();
+    await tester.tap(code);
+    await tester.pumpAndSettle();
+    expect(pressed, [NoteBlockCommand.code]);
+    handle.dispose();
+  });
+
+  // A block nothing can change is still a block the user has to get out of.
+  testWidgets('a block no command reaches points at plain text mode', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      hostBar(
+        390,
+        wiredBar(
+          availableCommands: const {NoteBlockCommand.divider},
+          blockAcceptsNoCommand: true,
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('note-format-plain-text-hint')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Editar como texto'), findsOneWidget);
+  });
+
+  testWidgets('an ordinary block says nothing at all', (tester) async {
+    await tester.pumpWidget(hostBar(390, wiredBar()));
+
+    expect(
+      find.byKey(const ValueKey('note-format-plain-text-hint')),
+      findsNothing,
+    );
+  });
+
+  // The narrowest phone at the largest text size, with the extra line the
+  // hint adds: the row has no give left there.
+  testWidgets('the bar with its hint fits 320 points at twice the text size', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      hostBar(
+        320,
+        wiredBar(
+          availableCommands: const {NoteBlockCommand.divider},
+          blockAcceptsNoCommand: true,
+        ),
+        textScale: 2,
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final bounds =
+        tester.getRect(find.byKey(const ValueKey('note-format-bar')));
+    expect(bounds.width, lessThanOrEqualTo(320));
+    for (final name in const ['undo', 'redo', 'bold', 'italic']) {
+      final rect = tester.getRect(find.byKey(ValueKey('note-format-$name')));
+      expect(rect.left, greaterThanOrEqualTo(bounds.left), reason: name);
+      expect(rect.right, lessThanOrEqualTo(bounds.right), reason: name);
+      expect(rect.height, greaterThanOrEqualTo(44), reason: name);
+    }
+    // The line wraps rather than running past the edge of the bar.
+    final hint = tester.getRect(find.textContaining('Editar como texto'));
+    expect(hint.right, lessThanOrEqualTo(bounds.right));
   });
 
   testWidgets('the highlight controller dims markers without hiding them', (

@@ -68,6 +68,7 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   final NoteBlockEditorController _editorController =
       NoteBlockEditorController();
   final MarkdownUndoHistory _undo = MarkdownUndoHistory();
+  final _FormatAvailability _availability = _FormatAvailability();
 
   MarkdownDocument _document = MarkdownDocument.parse('');
   DocumentCaret? _caret;
@@ -218,9 +219,11 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
               // and plain text mode has no blocks and no caret to act on.
               visible: _writing && !_rawMode,
               activeCommand: _activeCommand,
+              availableCommands: _availableCommands,
+              blockAcceptsNoCommand: _blockAcceptsNoCommand,
               onCommand: _applyCommand,
-              onBold: () => _wrap(MarkdownInlineStyle.bold),
-              onItalic: () => _wrap(MarkdownInlineStyle.italic),
+              onBold: _wrapCallback(MarkdownInlineStyle.bold),
+              onItalic: _wrapCallback(MarkdownInlineStyle.italic),
               onUndo: _undo.canUndo ? _performUndo : null,
               onRedo: _undo.canRedo ? _performRedo : null,
             ),
@@ -512,6 +515,37 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
       return null;
     }
     return activeCommandFor(_document.blocks[caret.blockIndex]);
+  }
+
+  /// The commands the bar may offer as live right now.
+  Set<NoteBlockCommand> get _availableCommands =>
+      _availability.commandsFor(_document, _caret);
+
+  /// Whether the block under the caret refuses everything that could change
+  /// it, which is the one case where the bar points at plain text mode.
+  ///
+  /// The separator is discounted: it inserts a rule under the block rather
+  /// than rewriting it, so it stays available on a block nothing else reaches
+  /// and would otherwise make every block look editable.
+  bool get _blockAcceptsNoCommand {
+    final caret = _caret;
+    if (caret == null || caret.blockIndex >= _document.blocks.length) {
+      return false;
+    }
+    return _availableCommands
+        .difference(const {NoteBlockCommand.divider}).isEmpty;
+  }
+
+  /// The bold or italic action, or null when wrapping the current selection
+  /// would do nothing.
+  VoidCallback? _wrapCallback(MarkdownInlineStyle style) {
+    final available = _availability.stylesFor(
+      _document,
+      _caret,
+      _editorController.sourceSelection,
+    );
+    if (!available.contains(style)) return null;
+    return () => _wrap(style);
   }
 
   void _initialize(String ownerId, NoteState state) {
@@ -861,5 +895,87 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
     setState(() => _allowPop = true);
     await WidgetsBinding.instance.endOfFrame;
     if (mounted) Navigator.of(context).pop(_note?.id);
+  }
+}
+
+/// Which toolbar controls can act, remembered against what they were computed
+/// from.
+///
+/// Each answer runs a whole document transformation, reparse included, and the
+/// bar asks nine times. This screen rebuilds on much more than an edit: the
+/// caret moving, the save indicator changing and the details panel opening all
+/// land here, and none of them change what the bar may offer. On a note of a
+/// few hundred lines a full pass costs about a millisecond, so the answers are
+/// kept until the things they were computed from move.
+///
+/// Cached rather than restated: the predicates run the real transformation, so
+/// they cannot drift from the commands, and only what they depend on is used as
+/// the key. A block command depends on the document and which block the caret
+/// is in, never on where in the block it sits; a wrap depends on the selection
+/// as well.
+class _FormatAvailability {
+  MarkdownDocument? _commandDocument;
+  int? _commandBlock;
+  Set<NoteBlockCommand> _commands = const {};
+
+  MarkdownDocument? _styleDocument;
+  int? _styleBlock;
+  TextSelection? _styleSelection;
+  Set<MarkdownInlineStyle> _styles = const {};
+
+  Set<NoteBlockCommand> commandsFor(
+    MarkdownDocument document,
+    DocumentCaret? caret,
+  ) {
+    if (caret == null || caret.blockIndex >= document.blocks.length) {
+      return const {};
+    }
+    if (identical(_commandDocument, document) &&
+        _commandBlock == caret.blockIndex) {
+      return _commands;
+    }
+    _commandDocument = document;
+    _commandBlock = caret.blockIndex;
+    return _commands = {
+      for (final command in NoteBlockCommand.values)
+        if (canApplyBlockCommand(document, caret, command)) command,
+    };
+  }
+
+  /// Only the two styles the bar offers: asking for the others would pay for
+  /// an answer nothing reads.
+  Set<MarkdownInlineStyle> stylesFor(
+    MarkdownDocument document,
+    DocumentCaret? caret,
+    TextSelection? selection,
+  ) {
+    if (caret == null ||
+        selection == null ||
+        !selection.isValid ||
+        selection.isCollapsed) {
+      return const {};
+    }
+    if (identical(_styleDocument, document) &&
+        _styleBlock == caret.blockIndex &&
+        _styleSelection == selection) {
+      return _styles;
+    }
+    _styleDocument = document;
+    _styleBlock = caret.blockIndex;
+    _styleSelection = selection;
+    return _styles = {
+      for (final style in const [
+        MarkdownInlineStyle.bold,
+        MarkdownInlineStyle.italic,
+      ])
+        if (canWrapSelection(
+          document,
+          caret.blockIndex,
+          selection.start,
+          selection.end,
+          style,
+        ))
+          style,
+    };
   }
 }

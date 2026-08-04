@@ -112,6 +112,105 @@ void main() {
     );
   });
 
+  // A fence with a language used to show Código as the selected command and
+  // then do nothing when tapped, with every other command inert beside it.
+  testWidgets('the code command unwraps a fence written by hand',
+      (tester) async {
+    final harness = await createHarness(
+      noteBody: '```dart\ncodigo uno\ncodigo dos\n```',
+    );
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-block-0')));
+    await tester.pumpAndSettle();
+
+    final code = find.byKey(const ValueKey('note-format-code'));
+    expect(tester.widget<IconButton>(code).onPressed, isNotNull);
+    await tester.tap(code);
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+
+    // The language and both lines come back, each on its own line.
+    expect(
+      harness.noteById(harness.algebraId).body,
+      'dart\ncodigo uno\ncodigo dos',
+    );
+  });
+
+  testWidgets('a fence dims the commands that cannot touch it', (tester) async {
+    final harness = await createHarness(
+      noteBody: '```dart\ncodigo uno\n```',
+    );
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-block-0')));
+    await tester.pumpAndSettle();
+
+    for (final name in const ['heading', 'bullet', 'quote', 'checklist']) {
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(ValueKey('note-format-$name')))
+            .onPressed,
+        isNull,
+        reason: name,
+      );
+    }
+    // Bold has no selection to act on either.
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('note-format-bold')))
+          .onPressed,
+      isNull,
+    );
+    // And the way out of the fence is live.
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('note-format-code')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  // The residue: a fence holding a longer run of backticks cannot be unwrapped
+  // without opening a fence over everything below it, so the bar says where
+  // the block can still be edited instead of leaving the user to guess.
+  testWidgets('a block no command reaches keeps a way out', (tester) async {
+    const body = '```\n````\n```\nsegunda';
+    final harness = await createHarness(noteBody: body);
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-block-0')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const ValueKey('note-format-code')))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.byKey(const ValueKey('note-format-plain-text-hint')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('note-raw-mode')));
+    await tester.pumpAndSettle();
+
+    final raw = tester.widget<TextField>(
+      find.byKey(const ValueKey('note-raw-field')),
+    );
+    expect(raw.controller!.text, body);
+  });
+
   testWidgets('offers the first H1 as the title only once', (tester) async {
     final harness = await createHarness(
       noteTitle: '',
