@@ -189,6 +189,9 @@ enum MarkdownBlockType {
   raw,
 }
 
+const Object _keepFenceClose = Object();
+final _boxPattern = RegExp(r'\[[ xX]\]');
+
 /// A single block of a note body.
 ///
 /// [leading] and [prefix] hold the literal source characters so serializing a
@@ -249,7 +252,9 @@ class MarkdownBlock {
     int? headingLevel,
     String? language,
     List<String>? codeLines,
-    String? fenceClose,
+    // Sentinel rather than null: null is a meaningful value here, it means the
+    // fence was never closed, so it cannot double as "leave this alone".
+    Object? fenceClose = _keepFenceClose,
   }) {
     return MarkdownBlock(
       type: type ?? this.type,
@@ -260,7 +265,9 @@ class MarkdownBlock {
       headingLevel: headingLevel ?? this.headingLevel,
       language: language ?? this.language,
       codeLines: codeLines ?? this.codeLines,
-      fenceClose: fenceClose ?? this.fenceClose,
+      fenceClose: identical(fenceClose, _keepFenceClose)
+          ? this.fenceClose
+          : fenceClose as String?,
     );
   }
 
@@ -308,7 +315,11 @@ final _leadingPattern = RegExp(r'^[ \t]*');
 final _headingPattern = RegExp(r'^(#{1,3}[ \t]+)([\s\S]*)$');
 final _dividerPattern = RegExp(r'^(-{3,}|\*{3,}|_{3,})[ \t]*\r?$');
 final _fencePattern = RegExp('^(`{3,})([\\s\\S]*)\$');
-final _checkPattern = RegExp(r'^([-*][ \t]+\[[ xX]\][ \t]+)([\s\S]*)$');
+// The lookahead lets an empty checklist item keep its box: a user who just
+// typed `- [ ]` and has not written anything yet still gets a tappable box,
+// while `- [x]texto` stays a plain bullet the way CommonMark reads it.
+final _checkPattern =
+    RegExp(r'^([-*][ \t]+\[[ xX]\](?:[ \t]+|(?=\r?$)))([\s\S]*)$');
 final _bulletPattern = RegExp(r'^([-*][ \t]+)([\s\S]*)$');
 final _numberedPattern = RegExp(r'^(\d+[.)][ \t]+)([\s\S]*)$');
 final _quotePattern = RegExp(r'^(>[ \t]?)([\s\S]*)$');
@@ -574,11 +585,15 @@ Agrega a `MarkdownBlock`:
   }
 
   /// Flips a checklist box, rewriting only the character inside the brackets.
+  ///
+  /// Refuses to act when the prefix no longer holds a box, so `checked` can
+  /// never disagree with what the serialized line says.
   MarkdownBlock toggleChecked() {
     if (type != MarkdownBlockType.checkItem) return this;
+    if (!_boxPattern.hasMatch(prefix)) return this;
     final next = !checked;
     return copyWith(
-      prefix: prefix.replaceFirst(RegExp(r'\[[ xX]\]'), next ? '[x]' : '[ ]'),
+      prefix: prefix.replaceFirst(_boxPattern, next ? '[x]' : '[ ]'),
       checked: next,
     );
   }
@@ -600,6 +615,7 @@ Agrega a `MarkdownDocument`:
   }
 
   MarkdownDocument removeBlock(int index) {
+    RangeError.checkValidIndex(index, blocks, 'index');
     if (blocks.length == 1) {
       return const MarkdownDocument([MarkdownBlock.paragraph()]);
     }

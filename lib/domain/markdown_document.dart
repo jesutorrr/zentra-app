@@ -169,7 +169,11 @@ final _leadingPattern = RegExp(r'^[ \t]*');
 final _headingPattern = RegExp(r'^(#{1,3}[ \t]+)([\s\S]*)$');
 final _dividerPattern = RegExp(r'^(-{3,}|\*{3,}|_{3,})[ \t]*\r?$');
 final _fencePattern = RegExp('^(`{3,})([\\s\\S]*)\$');
-final _checkPattern = RegExp(r'^([-*][ \t]+\[[ xX]\][ \t]+)([\s\S]*)$');
+// The lookahead lets an empty checklist item keep its box: a user who just
+// typed `- [ ]` and has not written anything yet still gets a tappable box,
+// while `- [x]texto` stays a plain bullet the way CommonMark reads it.
+final _checkPattern =
+    RegExp(r'^([-*][ \t]+\[[ xX]\](?:[ \t]+|(?=\r?$)))([\s\S]*)$');
 final _bulletPattern = RegExp(r'^([-*][ \t]+)([\s\S]*)$');
 final _numberedPattern = RegExp(r'^(\d+[.)][ \t]+)([\s\S]*)$');
 final _quotePattern = RegExp(r'^(>[ \t]?)([\s\S]*)$');

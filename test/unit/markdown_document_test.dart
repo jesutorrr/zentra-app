@@ -69,6 +69,15 @@ void main() {
     expect(open.blocks.single.codeLines, ['sin cerrar']);
   });
 
+  test('an empty checklist item still counts as a check item', () {
+    final document = MarkdownDocument.parse('- [ ]\n- [x]\r\n- [x]texto');
+    expect(document.blocks[0].type, MarkdownBlockType.checkItem);
+    expect(document.blocks[0].text, isEmpty);
+    expect(document.blocks[1].type, MarkdownBlockType.checkItem);
+    expect(document.blocks[1].checked, isTrue);
+    expect(document.blocks[2].type, MarkdownBlockType.bulletItem);
+  });
+
   test('keeps the closing fence line verbatim', () {
     final document = MarkdownDocument.parse('````dart\nvar a = 1;\n  ````   ');
     expect(document.blocks.single.fenceClose, '  ````   ');
