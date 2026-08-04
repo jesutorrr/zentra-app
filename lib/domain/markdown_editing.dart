@@ -1,5 +1,6 @@
 // lib/domain/markdown_editing.dart
 import 'markdown_document.dart';
+import 'markdown_inline.dart';
 
 final _boxPattern = RegExp(r'\[[ xX]\]');
 final _numberPattern = RegExp(r'^(\d+)([.)][ \t]+)$');
@@ -138,6 +139,226 @@ DocumentEdit changeIndent(
   );
 }
 
+/// Block level formatting actions exposed by the editor toolbar.
+enum NoteBlockCommand {
+  heading,
+  bullet,
+  numbered,
+  checklist,
+  quote,
+  code,
+  divider,
+}
+
+/// Applies a toolbar command to the whole active block. Commands are
+/// idempotent toggles and never insert text at the caret.
+DocumentEdit applyBlockCommand(
+  MarkdownDocument document,
+  DocumentCaret caret,
+  NoteBlockCommand command,
+) {
+  if (!_holdsBlock(document, caret.blockIndex)) {
+    return DocumentEdit(document, caret);
+  }
+  final block = document.blocks[caret.blockIndex];
+
+  if (command == NoteBlockCommand.divider) {
+    final next = document
+        .insertBlock(
+          caret.blockIndex + 1,
+          const MarkdownBlock(
+            type: MarkdownBlockType.divider,
+            prefix: '---',
+          ),
+        )
+        .insertBlock(caret.blockIndex + 2, const MarkdownBlock.paragraph());
+    return DocumentEdit(
+      next,
+      DocumentCaret(blockIndex: caret.blockIndex + 2, offset: 0),
+    );
+  }
+
+  if (command == NoteBlockCommand.code) {
+    return DocumentEdit(
+      document.replaceBlock(caret.blockIndex, _toggleFence(block)),
+      DocumentCaret(blockIndex: caret.blockIndex, offset: 0),
+    );
+  }
+
+  // A fence spans several source lines and a raw block keeps an unsupported
+  // line verbatim. Rebuilding either one from a prefix and `text` would drop
+  // the code, the closing marker or the characters we promised not to touch.
+  if (block.type == MarkdownBlockType.codeFence ||
+      block.type == MarkdownBlockType.raw) {
+    return DocumentEdit(document, caret);
+  }
+
+  final nextPrefix = _nextPrefixFor(block, command);
+  final rebuilt = MarkdownDocument.parse(
+    '${block.leading}$nextPrefix${block.text}',
+  ).blocks.first;
+  final length = rebuilt.toSourceLine().length;
+  final lower = _clamp(block.leading.length, length);
+  return DocumentEdit(
+    document.replaceBlock(caret.blockIndex, rebuilt),
+    DocumentCaret(
+      blockIndex: caret.blockIndex,
+      offset: _clampRange(
+        caret.offset + nextPrefix.length - block.prefix.length,
+        lower,
+        length,
+      ),
+    ),
+  );
+}
+
+/// Wraps [block] in a fence, or unwraps the one it already is.
+///
+/// The fence is always closed: an open one would swallow every block below it
+/// the next time the note is parsed.
+MarkdownBlock _toggleFence(MarkdownBlock block) {
+  if (block.type == MarkdownBlockType.codeFence) {
+    // Parsed rather than assumed to be a paragraph so the resulting block
+    // still describes the line it serializes.
+    return MarkdownDocument.parse(block.codeLines.join(' ')).blocks.first;
+  }
+  return MarkdownBlock(
+    type: MarkdownBlockType.codeFence,
+    prefix: '```',
+    // The whole source line, marker included, so toggling back returns the
+    // block the user started from.
+    codeLines: List.unmodifiable([block.toSourceLine()]),
+    fenceClose: '```',
+  );
+}
+
+String _nextPrefixFor(MarkdownBlock block, NoteBlockCommand command) {
+  switch (command) {
+    case NoteBlockCommand.heading:
+      if (block.type != MarkdownBlockType.heading) return '# ';
+      return switch (block.headingLevel) {
+        1 => '## ',
+        2 => '### ',
+        _ => '',
+      };
+    case NoteBlockCommand.bullet:
+      return block.type == MarkdownBlockType.bulletItem ? '' : '- ';
+    case NoteBlockCommand.numbered:
+      return block.type == MarkdownBlockType.numberedItem ? '' : '1. ';
+    case NoteBlockCommand.checklist:
+      return block.type == MarkdownBlockType.checkItem ? '' : '- [ ] ';
+    case NoteBlockCommand.quote:
+      return block.type == MarkdownBlockType.quote ? '' : '> ';
+    case NoteBlockCommand.code:
+    case NoteBlockCommand.divider:
+      return block.prefix;
+  }
+}
+
+/// Which toolbar button should look selected for [block].
+NoteBlockCommand? activeCommandFor(MarkdownBlock block) {
+  return switch (block.type) {
+    MarkdownBlockType.heading => NoteBlockCommand.heading,
+    MarkdownBlockType.bulletItem => NoteBlockCommand.bullet,
+    MarkdownBlockType.numberedItem => NoteBlockCommand.numbered,
+    MarkdownBlockType.checkItem => NoteBlockCommand.checklist,
+    MarkdownBlockType.quote => NoteBlockCommand.quote,
+    MarkdownBlockType.codeFence => NoteBlockCommand.code,
+    _ => null,
+  };
+}
+
+// Asterisks rather than underscores for emphasis: the tokenizer refuses an
+// underscore that touches a word character, so `hola_mundo_` would never read
+// back as italics.
+const _inlineMarkers = <MarkdownInlineStyle, String>{
+  MarkdownInlineStyle.bold: '**',
+  MarkdownInlineStyle.italic: '*',
+  MarkdownInlineStyle.code: '`',
+  MarkdownInlineStyle.strikethrough: '~~',
+};
+
+/// Wraps or unwraps a selection measured over the block's source line.
+DocumentEdit wrapSelection(
+  MarkdownDocument document,
+  int blockIndex,
+  int start,
+  int end,
+  MarkdownInlineStyle style,
+) {
+  if (!_holdsBlock(document, blockIndex)) {
+    return DocumentEdit(
+      document,
+      DocumentCaret(
+        blockIndex: _clamp(blockIndex, document.blocks.length - 1),
+        offset: 0,
+      ),
+    );
+  }
+  final block = document.blocks[blockIndex];
+  final source = block.toSourceLine();
+  final marker = _inlineMarkers[style];
+  // A fence spans several lines and a raw block holds an unsupported one, so a
+  // single pair of offsets cannot address either without losing source.
+  if (marker == null ||
+      block.type == MarkdownBlockType.codeFence ||
+      block.type == MarkdownBlockType.raw) {
+    return DocumentEdit(
+      document,
+      DocumentCaret(
+        blockIndex: blockIndex,
+        offset: _clamp(end, source.length),
+      ),
+    );
+  }
+
+  // The block marker is not styled text: wrapping it would demote a heading to
+  // a paragraph the moment the line is parsed again.
+  final from = _clampRange(
+    start,
+    _clamp(block.leading.length + block.prefix.length, source.length),
+    source.length,
+  );
+  final to = _clampRange(end, from, source.length);
+  if (from == to) {
+    return DocumentEdit(
+      document,
+      DocumentCaret(blockIndex: blockIndex, offset: to),
+    );
+  }
+
+  final before = source.substring(0, from);
+  final selected = source.substring(from, to);
+  final after = source.substring(to);
+
+  final String rebuilt;
+  final int caretEnd;
+  if (before.endsWith(marker) && after.startsWith(marker)) {
+    rebuilt = '${before.substring(0, before.length - marker.length)}'
+        '$selected${after.substring(marker.length)}';
+    caretEnd = to - marker.length;
+  } else if (selected.length > marker.length * 2 &&
+      selected.startsWith(marker) &&
+      selected.endsWith(marker)) {
+    // The selection swallowed the markers it should toggle off.
+    rebuilt = '$before'
+        '${selected.substring(marker.length, selected.length - marker.length)}'
+        '$after';
+    caretEnd = to - marker.length * 2;
+  } else {
+    rebuilt = '$before$marker$selected$marker$after';
+    caretEnd = to + marker.length;
+  }
+
+  return DocumentEdit(
+    document.replaceBlock(
+      blockIndex,
+      MarkdownDocument.parse(rebuilt).blocks.first,
+    ),
+    DocumentCaret(blockIndex: blockIndex, offset: caretEnd),
+  );
+}
+
 String _continuationPrefix(MarkdownBlock block) {
   switch (block.type) {
     case MarkdownBlockType.bulletItem:
@@ -164,7 +385,10 @@ String _nextNumber(String prefix) {
 bool _holdsBlock(MarkdownDocument document, int index) =>
     index >= 0 && index < document.blocks.length;
 
-int _clamp(int value, int max) {
-  if (value < 0) return 0;
+int _clamp(int value, int max) => _clampRange(value, 0, max);
+
+/// Keeps [value] within `[min, max]`. Callers must pass `min <= max`.
+int _clampRange(int value, int min, int max) {
+  if (value < min) return min;
   return value > max ? max : value;
 }
