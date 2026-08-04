@@ -5,7 +5,8 @@ El proyecto C (pulido de iPad y accesibilidad) tiene su propio spec posterior.
 
 - Fecha: 2026-08-03
 - Estado: aprobado para escribir plan de implementación
-- Alcance: `lib/domain`, `lib/presentation` de Notas. Sin cambios de esquema.
+- Alcance: `lib/domain`, `lib/presentation` de Notas. Sin cambios de esquema y
+  sin trabajo de Apple Pencil.
 
 ## 1. Problema
 
@@ -43,8 +44,11 @@ Los puntos 1 a 9 entran en este spec. El punto 10 pertenece al proyecto C.
   plan maestro lo excluye en 5.14 y rompería Drift, el outbox de sync y los
   backups.
 - No se agregan dependencias nuevas.
-- Apple Pencil en esta fase es escritura a mano convertida a texto vía Scribble.
-  El lienzo de dibujo queda fuera.
+- Apple Pencil queda completamente fuera de este spec y se mueve a la fase
+  best effort, junto con la integración de Supabase. Scribble seguirá
+  funcionando por defecto porque `TextField` lo trae activado en iPad con iOS
+  14 o superior, pero no es un entregable, no se verifica en hardware y no se
+  comunica al usuario en esta fase.
 
 ## 3. Contrato de no pérdida de texto
 
@@ -133,17 +137,6 @@ No habrá selección continua entre bloques mientras se edita. Se compensa con:
 
 - Modo lectura envuelto en `SelectionArea`, con selección y copiado de corrido.
 - Acción "Seleccionar todo" que copia el Markdown crudo completo.
-
-### 5.3 Apple Pencil
-
-- El bloque activo es un `TextField`, así que Scribble funciona sin código
-  extra en iPads con iOS 14 o superior.
-- Si el puntero que toca un bloque es `PointerDeviceKind.stylus`, se entra a
-  edición en ese bloque de inmediato, sin requerir un toque previo con el dedo.
-- Limitación conocida no resoluble desde la app: Flutter tiene dos defectos
-  abiertos con el toolbar de selección y el teclado al usar Apple Pencil en
-  iPad (flutter#147558 y flutter#160662). Se verifica en hardware real y se
-  documenta.
 
 ## 6. Superficie única de lectura y escritura
 
@@ -249,7 +242,6 @@ elegir cualquiera de las dos, el banner no vuelve a mostrarse para esa nota.
 | Pérdida de texto | Bloque `raw`, ciclo completo probado, guardado al cambiar de bloque, undo por documento, modo texto plano |
 | Rendimiento en notas largas | `ListView.builder`, bloques inactivos baratos, reparseo incremental |
 | Salto visual al entrar a un bloque | Un solo motor de estilos inline para bloque activo y renderizado |
-| Defectos de Flutter con Pencil en iPad | Verificación en hardware, limitación documentada |
 | Regresión en llamadores de `NoteEditorScreen` | Inventario explícito de llamadores como primera tarea del plan |
 
 ## 12. Definición de terminado
@@ -267,17 +259,30 @@ elegir cualquiera de las dos, el banner no vuelve a mostrarse para esa nota.
 7. La búsqueda resalta coincidencias y muestra el fragmento correspondiente.
 8. Las etiquetas se editan como chips con autocompletado y se puede filtrar por
    etiqueta.
-9. Escribir con Apple Pencil sobre un bloque en un iPad físico convierte la
-   escritura a texto.
-10. Toda la suite de tests pasa y `flutter build ios --release --no-codesign`
-    compila sin errores.
+9. Toda la suite de tests pasa y `flutter build ios --release --no-codesign`
+   compila sin errores.
 
 ## 13. Fuera de este spec
 
-- Proyecto C: atajos de teclado en iPad, hover, orden de foco, y el arreglo del
-  `liveRegion` de `NoteSaveStatus` en VoiceOver.
-- Lienzo de dibujo con Apple Pencil, que requeriría tabla nueva, migración y
-  cambios en backup, sync y borrado de cuenta.
+Proyecto C, con spec propio inmediatamente posterior:
+
+- Atajos de teclado en iPad, hover y orden de foco.
+- Arreglo del `liveRegion` de `NoteSaveStatus` en VoiceOver.
+
+Fase best effort, sin fecha, junto con la integración de Supabase que se está
+separando en paralelo:
+
+- Verificación de Scribble en un iPad físico y comunicación de la capacidad al
+  usuario.
+- Entrada a edición al detectar `PointerDeviceKind.stylus` sobre un bloque.
+- Convivencia con los dos defectos abiertos de Flutter en el toolbar de
+  selección y el teclado al usar Apple Pencil en iPad (flutter#147558 y
+  flutter#160662), que no son resolubles desde la app.
+- Lienzo de dibujo, que requeriría tabla nueva, migración y cambios en backup,
+  sync y borrado de cuenta.
+
+Sin planear:
+
 - Tablas, imágenes y adjuntos.
 - Selección continua entre bloques durante la edición.
 
@@ -285,12 +290,15 @@ elegir cualquiera de las dos, el banner no vuelve a mostrarse para esa nota.
 
 - Plan maestro, Fase 5 Notas activas, secciones 5.3, 5.4, 5.12 y 5.14:
   `docs/zentra-calma-precisa-notas-activas-plan-v2.md`.
+- Alternativas de render de Markdown evaluadas y descartadas por necesitar
+  posiciones de origen: https://pub.dev/packages/flutter_markdown_plus
+
+Referencias guardadas para la fase best effort de Apple Pencil:
+
 - `stylusHandwritingEnabled`, soporte de Scribble en Flutter:
   https://api.flutter.dev/flutter/widgets/EditableText/stylusHandwritingEnabled.html
 - Defectos abiertos de Apple Pencil en iPad:
   https://github.com/flutter/flutter/issues/147558 y
   https://github.com/flutter/flutter/issues/160662
-- Alternativas de render de Markdown evaluadas y descartadas por necesitar
-  posiciones de origen: https://pub.dev/packages/flutter_markdown_plus
-- Alternativas de lienzo evaluadas para una fase futura:
-  https://pub.dev/packages/pencil_kit y https://github.com/timcreatedit/scribble
+- Alternativas de lienzo: https://pub.dev/packages/pencil_kit y
+  https://github.com/timcreatedit/scribble
