@@ -1,4 +1,5 @@
 // lib/domain/markdown_document.dart
+import 'markdown_inline.dart';
 
 /// Line level blocks the note editor understands.
 enum MarkdownBlockType {
@@ -255,6 +256,69 @@ class MarkdownDocument {
     return MarkdownDocument(List.unmodifiable(next));
   }
 
+  int get checkItemCount =>
+      blocks.where((block) => block.type == MarkdownBlockType.checkItem).length;
+
+  int get checkedCount => blocks
+      .where(
+        (block) => block.type == MarkdownBlockType.checkItem && block.checked,
+      )
+      .length;
+
+  /// Human readable text of every block, one per line, without markers.
+  String plainText() =>
+      blocks.map(_visibleText).where((line) => line.isNotEmpty).join('\n');
+
+  /// First meaningful line, for note cards.
+  String previewText({int maxLength = 140}) {
+    if (maxLength <= 0) return '';
+    for (final block in blocks) {
+      final line = _visibleText(block);
+      if (line.isEmpty) continue;
+      if (line.length <= maxLength) return line;
+      final space = line.lastIndexOf(' ', maxLength);
+      final cut = space <= 0 ? _wholeCodePointCut(line, maxLength) : space;
+      return '${line.substring(0, cut).trimRight()}…';
+    }
+    return '';
+  }
+
+  /// The text a reader actually sees on [block], with every marker removed.
+  static String _visibleText(MarkdownBlock block) {
+    switch (block.type) {
+      case MarkdownBlockType.divider:
+        return '';
+      case MarkdownBlockType.codeFence:
+        // The fence body keeps its own indentation and blank lines, which read
+        // as a run of spaces once the lines are folded into one.
+        return block.codeLines
+            .map((line) => line.trim())
+            .where((line) => line.isNotEmpty)
+            .join(' ');
+      case MarkdownBlockType.raw:
+        // Unsupported syntax is kept verbatim everywhere else, so a preview
+        // that rewrote it would describe a line the note does not contain.
+        return block.text.trim();
+      default:
+        // Marker segments cover backslash escapes and link targets too, so
+        // dropping them leaves the escaped character and the link label. Code
+        // spans arrive as a single literal segment and survive untouched.
+        return tokenizeInline(block.text)
+            .where((segment) => !segment.isMarker)
+            .map((segment) => segment.text)
+            .join()
+            .trim();
+    }
+  }
+
+  /// Moves a hard cut off the middle of a surrogate pair, so truncating a line
+  /// that ends in an emoji never leaves half a code point behind.
+  static int _wholeCodePointCut(String line, int at) {
+    final unit = line.codeUnitAt(at - 1);
+    final isHighSurrogate = unit >= 0xD800 && unit <= 0xDBFF;
+    return isHighSurrogate ? at - 1 : at;
+  }
+
   static MarkdownBlock _parseLine(String line, String leading, String rest) {
     if (_unsupportedPattern.hasMatch(rest)) {
       return MarkdownBlock(type: MarkdownBlockType.raw, text: line);
@@ -322,4 +386,28 @@ class MarkdownDocument {
       text: rest,
     );
   }
+}
+
+/// Returns the slice of [body] around the first occurrence of [query], so the
+/// note card can show where the match actually is.
+String markdownExcerptAround(String body, String query, {int radius = 40}) {
+  final plain = MarkdownDocument.parse(body).plainText().replaceAll('\n', ' ');
+  final needle = query.trim();
+  if (needle.isEmpty) return plain;
+  final at = plain.toLowerCase().indexOf(needle.toLowerCase());
+  if (at == -1) return plain;
+  // Lowercasing can change a string's length, so the offsets it yields are
+  // clamped before they ever index back into the original text.
+  final span = radius < 0 ? 0 : radius;
+  final start = _clampToLength(at - span, plain.length);
+  final end = _clampToLength(at + needle.length + span, plain.length);
+  if (start >= end) return plain;
+  final prefix = start > 0 ? '…' : '';
+  final suffix = end < plain.length ? '…' : '';
+  return '$prefix${plain.substring(start, end)}$suffix';
+}
+
+int _clampToLength(int value, int length) {
+  if (value < 0) return 0;
+  return value > length ? length : value;
 }
