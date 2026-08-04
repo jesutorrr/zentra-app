@@ -349,7 +349,7 @@ Markdown literal. `NoteEditorScreen` se retiró; la única superficie es
 | Gate | Estado |
 |---|---|
 | TECHNICAL | PASS: recorrido completo y suite enfocada en verde. |
-| CONTRACT | PASS con hallazgos: nada prohibido aparece, pero quedan cinco observaciones abiertas. |
+| CONTRACT | PASS con hallazgos: nada prohibido aparece, pero quedan nueve observaciones abiertas, cinco importantes y cuatro de pulido. |
 | VISUAL | Pendiente: las capturas existen y fueron revisadas, falta el sí de Uri. |
 | DEVICE | PASS en simuladores; Release física pendiente. |
 | URI APPROVED | Pendiente. |
