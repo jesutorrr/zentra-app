@@ -156,9 +156,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('iPad Pro portrait uses one shared list-detail route',
+  testWidgets('an expanded window uses one shared list-detail route',
       (tester) async {
-    await configureDevice(tester, logicalSize: const Size(834, 1194));
+    await configureDevice(tester, logicalSize: const Size(1024, 1366));
     final harness = await createHarness();
     addTearDown(harness.database.close);
 
@@ -173,6 +173,31 @@ void main() {
       find.byKey(ValueKey('note-detail-${harness.algebraId}')),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  // The library used to split into two panes at 800 while the note surface
+  // waited for the repo's expanded class at 840, so an 11 inch iPad in
+  // portrait got a two pane library and a note with no side column at all.
+  testWidgets('iPad Pro portrait keeps the library and the note in step',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(834, 1194));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('notes-compact-layout')), findsOneWidget);
+    expect(find.byKey(const ValueKey('notes-expanded-layout')), findsNothing);
+
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('note-details-column')), findsNothing);
+    expect(find.byKey(const ValueKey('note-details-action')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -295,6 +320,102 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+
+  // `Todas` used to ride inside the scrolling strip, so reaching a tag on the
+  // right pushed the only control that clears the filter off the window.
+  testWidgets('the clear-filter chip survives a long strip of tags',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+    await harness.repository.upsertNote(
+      Note(
+        id: 'note-etiquetada',
+        userId: 'uri',
+        title: 'Nota con muchas etiquetas',
+        body: 'Cuerpo de la nota.',
+        createdAt: DateTime.utc(2026, 7, 25, 8),
+        updatedAt: DateTime.utc(2026, 7, 26, 8),
+        accentKey: 'focus',
+        tags: const [
+          'arquitectura',
+          'diseño',
+          'entrevistas',
+          'finanzas',
+          'investigación',
+          'lecturas',
+          'mercadotecnia',
+          'pendientes',
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    final all = find.byKey(const ValueKey('notes-tag-filter-all'));
+    final strip = find.byKey(const ValueKey('notes-tag-filter-scroll'));
+    // Brings the strip up the page. Everything after this is about the strip's
+    // own horizontal scrolling, which is where `Todas` used to disappear.
+    await tester.ensureVisible(strip);
+    await tester.pumpAndSettle();
+    expect(all.hitTestable(), findsOneWidget);
+
+    final farTag = find.byKey(const ValueKey('notes-tag-filter-pendientes'));
+    await tester.scrollUntilVisible(
+      farTag,
+      300,
+      scrollable: find.descendant(of: strip, matching: find.byType(Scrollable)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(all.hitTestable(), findsOneWidget);
+    expect(tester.getRect(all).right, lessThanOrEqualTo(390));
+
+    await tester.tap(farTag);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Repasar Álgebra lineal'), findsNothing);
+    // No `ensureVisible` here on purpose: the way out of an emptied library
+    // has to be one tap away, not one scroll and one tap.
+    expect(all.hitTestable(), findsOneWidget);
+    await tester.tap(all);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Repasar Álgebra lineal'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the library holds together at 320dp and 200 percent text',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(320, 640));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(
+      buildApp(harness, const NotesScreen(), textScale: 2),
+    );
+    await tester.pumpAndSettle();
+
+    // Nothing overflowed on the way here, including the loading placeholders
+    // the screen shows before the first note arrives.
+    expect(tester.takeException(), isNull);
+
+    final all = find.byKey(const ValueKey('notes-tag-filter-all'));
+    await tester.scrollUntilVisible(
+      all,
+      240,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('notes-compact-layout')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(all.hitTestable(), findsOneWidget);
+    expect(tester.getRect(all).right, lessThanOrEqualTo(320));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('tag filter offers every tag the owner has used', (tester) async {

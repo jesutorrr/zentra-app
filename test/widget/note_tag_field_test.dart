@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zentra/presentation/theme.dart';
 import 'package:zentra/presentation/widgets/note_tag_field.dart';
@@ -11,6 +12,7 @@ void main() {
     List<String> initial = const [],
     List<String> suggestions = const [],
     double textScale = 1,
+    double? width,
   }) async {
     final host = _TagsHost(initial);
     await tester.pumpWidget(
@@ -25,11 +27,18 @@ void main() {
         ),
         home: Scaffold(
           body: StatefulBuilder(
-            builder: (context, setState) => NoteTagField(
-              value: host.tags,
-              suggestions: suggestions,
-              onChanged: (next) => setState(() => host.tags = next),
-            ),
+            builder: (context, setState) {
+              final field = NoteTagField(
+                value: host.tags,
+                suggestions: suggestions,
+                onChanged: (next) => setState(() => host.tags = next),
+              );
+              if (width == null) return field;
+              return Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: width, child: field),
+              );
+            },
           ),
         ),
       ),
@@ -202,6 +211,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
+  });
+
+  // The field lives in a 320 point details column, where the helper sentence
+  // does not fit on one line and used to end in `para agre…`.
+  testWidgets('the helper sentence wraps instead of ending in an ellipsis', (
+    tester,
+  ) async {
+    const helper = 'Escribe una y confirma para agregarla.';
+    await pumpField(tester, width: 288);
+
+    final paragraph = tester.renderObject<RenderParagraph>(find.text(helper));
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(paragraph.size.height, greaterThan(paragraph.preferredLineHeight));
+  });
+
+  testWidgets('the helper sentence still fits at 200 percent text', (
+    tester,
+  ) async {
+    const helper = 'Escribe una y confirma para agregarla.';
+    await pumpField(tester, width: 288, textScale: 2);
+
+    expect(
+      tester.renderObject<RenderParagraph>(find.text(helper)).didExceedMaxLines,
+      isFalse,
+    );
     expect(tester.takeException(), isNull);
   });
 }

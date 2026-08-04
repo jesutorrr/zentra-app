@@ -23,8 +23,6 @@ class NotesScreen extends ConsumerStatefulWidget {
 }
 
 class _NotesScreenState extends ConsumerState<NotesScreen> {
-  static const double _listDetailMinWidth = 800;
-
   final TextEditingController _searchController = TextEditingController();
   NotesLibrarySection _section = NotesLibrarySection.recent;
   String _query = '';
@@ -76,8 +74,10 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
                     ref.read(noteControllerProvider(ownerId).notifier);
                 return ResponsiveLayoutBuilder(
                   builder: (context, layout) {
-                    final usesListDetail = MediaQuery.sizeOf(context).width >=
-                            _listDetailMinWidth &&
+                    // The same threshold the note surface uses for its side
+                    // column. Two different ones handed an 11 inch iPad in
+                    // portrait a two pane library and a bottom sheet note.
+                    final usesListDetail = layout.isExpanded &&
                         !layout.isShort &&
                         MediaQuery.textScalerOf(context).scale(16) <= 23;
                     final visibleNotes = _visibleNotes(noteState);
@@ -281,30 +281,44 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
     final active = _activeTagFilter(state);
     return Semantics(
       label: 'Filtrar por etiqueta',
-      child: SingleChildScrollView(
+      child: Row(
         key: const ValueKey('notes-tag-filter'),
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: [
-            FilterChip(
-              key: const ValueKey('notes-tag-filter-all'),
-              label: const Text('Todas'),
-              selected: active == null,
-              onSelected: (_) => _selectTag(null),
-            ),
-            for (final tag in state.allTags)
-              Padding(
-                padding: EdgeInsetsDirectional.only(start: context.spacing.xs),
-                child: FilterChip(
-                  key: ValueKey('notes-tag-filter-$tag'),
-                  label: Text(tag),
-                  selected: active == tag,
-                  onSelected: (selected) => _selectTag(selected ? tag : null),
-                ),
+        children: [
+          // Outside the scrolling part on purpose. It is the only way back
+          // from a library the filter has emptied, so scrolling towards a tag
+          // must never carry it off the edge.
+          FilterChip(
+            key: const ValueKey('notes-tag-filter-all'),
+            label: const Text('Todas'),
+            selected: active == null,
+            onSelected: (_) => _selectTag(null),
+          ),
+          SizedBox(width: context.spacing.xs),
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('notes-tag-filter-scroll'),
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  for (final tag in state.allTags)
+                    Padding(
+                      padding: EdgeInsetsDirectional.only(
+                        end: context.spacing.xs,
+                      ),
+                      child: FilterChip(
+                        key: ValueKey('notes-tag-filter-$tag'),
+                        label: Text(tag),
+                        selected: active == tag,
+                        onSelected: (selected) =>
+                            _selectTag(selected ? tag : null),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -677,19 +691,25 @@ class _NotesLoadingState extends StatelessWidget {
       liveRegion: true,
       label: 'Cargando notas',
       child: ExcludeSemantics(
-        child: Column(
-          children: [
-            for (var index = 0; index < 4; index++) ...[
-              Container(
-                height: index == 0 ? 88 : 150,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(context.radii.large),
+        // Scrolls like the list it stands in for. Its four placeholders add up
+        // to a fixed height that a short window cannot hold, and a plain
+        // column would overflow before the first note ever arrives.
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            children: [
+              for (var index = 0; index < 4; index++) ...[
+                Container(
+                  height: index == 0 ? 88 : 150,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainer,
+                    borderRadius: BorderRadius.circular(context.radii.large),
+                  ),
                 ),
-              ),
-              if (index < 3) SizedBox(height: context.spacing.sm),
+                if (index < 3) SizedBox(height: context.spacing.sm),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

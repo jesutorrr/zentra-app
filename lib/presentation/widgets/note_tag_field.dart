@@ -7,6 +7,14 @@ import '../design_tokens.dart';
 /// How many suggestions still read as a glance rather than a second list.
 const int _maxSuggestions = 5;
 
+/// Room the helper sentence is allowed to take.
+///
+/// A decoration helper is one line by default, and one line is not enough in
+/// the 320 point details column: the sentence came out as `para agre…`. It is
+/// fixed copy with nothing interpolated into it, so the only thing this has to
+/// clear is the largest text size, not a runaway string.
+const int _helperMaxLines = 6;
+
 /// Tag editor: what the note already carries as chips, and what the owner has
 /// written elsewhere as suggestions.
 ///
@@ -156,6 +164,7 @@ class _NoteTagFieldState extends State<NoteTagField> {
             labelText: 'Etiquetas',
             hintText: 'estudio',
             helperText: 'Escribe una y confirma para agregarla.',
+            helperMaxLines: _helperMaxLines,
             prefixIcon: const Icon(Icons.sell_outlined),
             suffixIcon: hasDraft
                 ? IconButton(

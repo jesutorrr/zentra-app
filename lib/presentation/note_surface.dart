@@ -35,6 +35,9 @@ const Duration _saveDebounceDelay = Duration(milliseconds: 700);
 /// Width of the details column on a window wide enough to hold one.
 const double _detailsColumnWidth = 320;
 
+/// Widest the details sheet lets its content grow on a tablet.
+const double _detailsSheetWidth = 560;
+
 /// Largest scaled body size that still leaves room for a side column. Past it
 /// the details go back to the bottom sheet, where they get the full width.
 const double _sideColumnTextCeiling = 23;
@@ -804,8 +807,13 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
               context.spacing.md,
               context.spacing.md,
             ),
-            child: _buildDetailsPanel(
-              onRefresh: () => setSheetState(() {}),
+            // A stack of tiles and chips, not prose: past this width the
+            // tiles stop reading as controls and start reading as banners.
+            child: ResponsiveContentFrame(
+              maxWidth: _detailsSheetWidth,
+              child: _buildDetailsPanel(
+                onRefresh: () => setSheetState(() {}),
+              ),
             ),
           ),
         ),
