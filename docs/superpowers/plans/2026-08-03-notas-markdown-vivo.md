@@ -31,6 +31,10 @@ nuevas.
   stylus.
 - Checkpoint de git antes de cada tarea y commit al cerrarla.
 - Al cerrar cada fase: `flutter build ios --release --no-codesign`.
+- **El árbol de trabajo está sucio con trabajo de otro agente.** Nunca uses
+  `git add -A`, `git add .` ni `git commit -a`. Agrega al índice únicamente los
+  archivos exactos que enumera la sección Files de tu tarea. Si un test falla en
+  un archivo que tu tarea no toca, repórtalo, no lo arregles.
 
 ## Inventario de llamadores de `NoteEditorScreen`
 
@@ -3706,7 +3710,13 @@ devolver vacío.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A lib test integration_test
+git rm lib/presentation/note_editor_screen.dart
+git add lib/main.dart \
+  lib/presentation/notes_screen.dart \
+  lib/presentation/calendar_screen.dart \
+  lib/presentation/widgets/notes_components.dart \
+  integration_test/screen_reviewer_test.dart \
+  test/widget/notes_screen_test.dart
 git commit -m "refactor(notas): retira NoteEditorScreen en favor de la superficie única"
 ```
 
