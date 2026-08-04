@@ -13,6 +13,9 @@ enum MarkdownBlockType {
   raw,
 }
 
+const Object _keepFenceClose = Object();
+final _boxPattern = RegExp(r'\[[ xX]\]');
+
 /// A single block of a note body.
 ///
 /// [leading] and [prefix] hold the literal source characters so serializing a
@@ -81,11 +84,15 @@ class MarkdownBlock {
   }
 
   /// Flips a checklist box, rewriting only the character inside the brackets.
+  ///
+  /// Refuses to act when the prefix no longer holds a box, so [checked] can
+  /// never disagree with what the serialized line says.
   MarkdownBlock toggleChecked() {
     if (type != MarkdownBlockType.checkItem) return this;
+    if (!_boxPattern.hasMatch(prefix)) return this;
     final next = !checked;
     return copyWith(
-      prefix: prefix.replaceFirst(RegExp(r'\[[ xX]\]'), next ? '[x]' : '[ ]'),
+      prefix: prefix.replaceFirst(_boxPattern, next ? '[x]' : '[ ]'),
       checked: next,
     );
   }
@@ -99,7 +106,9 @@ class MarkdownBlock {
     int? headingLevel,
     String? language,
     List<String>? codeLines,
-    String? fenceClose,
+    // Sentinel rather than null: null is a meaningful value here, it means the
+    // fence was never closed, so it cannot double as "leave this alone".
+    Object? fenceClose = _keepFenceClose,
   }) {
     return MarkdownBlock(
       type: type ?? this.type,
@@ -110,7 +119,9 @@ class MarkdownBlock {
       headingLevel: headingLevel ?? this.headingLevel,
       language: language ?? this.language,
       codeLines: codeLines ?? this.codeLines,
-      fenceClose: fenceClose ?? this.fenceClose,
+      fenceClose: identical(fenceClose, _keepFenceClose)
+          ? this.fenceClose
+          : fenceClose as String?,
     );
   }
 
@@ -232,6 +243,7 @@ class MarkdownDocument {
   }
 
   MarkdownDocument removeBlock(int index) {
+    RangeError.checkValidIndex(index, blocks, 'index');
     if (blocks.length == 1) {
       return const MarkdownDocument([MarkdownBlock.paragraph()]);
     }

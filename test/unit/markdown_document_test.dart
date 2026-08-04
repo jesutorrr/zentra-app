@@ -90,6 +90,7 @@ void main() {
     expect(MarkdownDocument.parse('- a').blocks.single.indentLevel, 0);
     expect(MarkdownDocument.parse('  - a').blocks.single.indentLevel, 1);
     expect(MarkdownDocument.parse('\t- a').blocks.single.indentLevel, 1);
-    expect(MarkdownDocument.parse('            - a').blocks.single.indentLevel, 3);
+    expect(
+        MarkdownDocument.parse('            - a').blocks.single.indentLevel, 3);
   });
 }
