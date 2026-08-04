@@ -42,6 +42,10 @@ const double _sideColumnTextCeiling = 23;
 /// source, so a field selection sits exactly one character ahead of it.
 const int _sentinelLength = 1;
 
+/// The single line a finished checklist gets. It acknowledges the work instead
+/// of rewarding it: no XP, no achievement, no sound and no animation.
+const String _checklistDoneMessage = 'Terminaste todo lo de esta nota.';
+
 /// A note, readable and writable in the same place.
 ///
 /// There is no separate edit mode to enter and leave: the body is always the
@@ -80,6 +84,11 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   bool _detailsExpanded = true;
   bool _h1BannerDismissed = false;
   bool _rawMode = false;
+
+  /// Whether a checklist has already been finished during this visit to the
+  /// screen. Finishing one twice is still finishing it once.
+  bool _checklistCelebrated = false;
+  bool _showsChecklistComplete = false;
 
   /// The body as it stands right now.
   ///
@@ -302,14 +311,50 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
         SizedBox(height: context.spacing.sm),
         if (_rawMode)
           _buildRawField(context)
-        else
+        else ...[
           NoteBlockEditor(
             document: _document,
             controller: _editorController,
             onChanged: _onDocumentChanged,
             onCaretChanged: _onCaretChanged,
           ),
+          if (_showsChecklistComplete) _buildChecklistDone(context),
+        ],
       ],
+    );
+  }
+
+  /// The quiet confirmation that every box on the note is ticked.
+  Widget _buildChecklistDone(BuildContext context) {
+    return Semantics(
+      key: const ValueKey('note-checklist-complete'),
+      // Read out where it stands, so the caret is never pulled away from the
+      // box the reader just ticked.
+      liveRegion: true,
+      label: _checklistDoneMessage,
+      excludeSemantics: true,
+      child: Padding(
+        padding: EdgeInsets.only(top: context.spacing.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.check_circle_outline_rounded,
+              size: 18,
+              color: context.zentraPalette.brandTeal,
+            ),
+            SizedBox(width: context.spacing.xs),
+            // Expanded rather than a bare text: at a large text scale the line
+            // has to wrap instead of running off the edge.
+            Expanded(
+              child: Text(
+                _checklistDoneMessage,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -498,7 +543,10 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
     // debounce and lands on disk right away.
     final tickedBox = document.checkedCount != _document.checkedCount &&
         document.checkItemCount == _document.checkItemCount;
-    setState(() => _document = document);
+    setState(() {
+      _document = document;
+      _showsChecklistComplete = _confirmsChecklist(document, tickedBox);
+    });
     if (tickedBox) {
       _saveDebounce?.cancel();
       setState(() {
@@ -509,6 +557,26 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
       return;
     }
     _markDirty();
+  }
+
+  /// Whether the finished checklist line belongs on screen now that
+  /// [document] has landed, given whether a box was ticked to produce it.
+  ///
+  /// Only a tick can finish a checklist. Deleting the last pending item leaves
+  /// the rest ticked without anything having been done, and a note that was
+  /// already complete when it opened never crossed the line at all. Once shown
+  /// the message leaves as soon as a box is unticked and does not come back,
+  /// so the same checklist cannot be finished twice in one visit.
+  ///
+  /// Only call inside a [setState]: it latches the visit's one confirmation.
+  bool _confirmsChecklist(MarkdownDocument document, bool tickedBox) {
+    final isComplete = document.checkItemCount > 0 &&
+        document.checkedCount == document.checkItemCount;
+    if (!isComplete) return false;
+    if (_showsChecklistComplete) return true;
+    if (!tickedBox || _checklistCelebrated) return false;
+    _checklistCelebrated = true;
+    return true;
   }
 
   void _onCaretChanged(DocumentCaret? caret) {
