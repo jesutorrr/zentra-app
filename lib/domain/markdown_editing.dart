@@ -45,7 +45,17 @@ DocumentEdit splitBlock(MarkdownDocument document, DocumentCaret caret) {
     return DocumentEdit(document, caret);
   }
 
-  if (block.isListLike && block.text.isEmpty) {
+  // Enter on an item that has no content leaves the list, the way every notes
+  // app does it. An indented item steps out one level first, so the user walks
+  // back out of a nested list instead of falling straight to a paragraph.
+  final exitsList =
+      (block.isListLike || block.type == MarkdownBlockType.quote) &&
+          block.text.isEmpty &&
+          caret.offset >= block.toSourceLine().length;
+  if (exitsList) {
+    if (block.isListLike && block.indentLevel > 0) {
+      return changeIndent(document, caret, increase: false);
+    }
     final cleared = MarkdownBlock(
       type: MarkdownBlockType.paragraph,
       leading: block.leading,
@@ -72,6 +82,7 @@ DocumentEdit splitBlock(MarkdownDocument document, DocumentCaret caret) {
   final next = document
       .replaceBlock(caret.blockIndex, headBlock)
       .insertBlock(caret.blockIndex + 1, tailBlock);
+  if (!_survivesReparse(next)) return DocumentEdit(document, caret);
   return DocumentEdit(
     next,
     DocumentCaret(
@@ -95,11 +106,15 @@ DocumentEdit mergeWithPrevious(MarkdownDocument document, DocumentCaret caret) {
     return DocumentEdit(document, caret);
   }
   final previousSource = previous.toSourceLine();
-  final merged =
-      MarkdownDocument.parse('$previousSource${current.text}').blocks.first;
+  // A divider keeps all of its characters in `prefix` and has no text, so
+  // merging by text alone would delete the rule instead of joining it.
+  final carried =
+      current.type == MarkdownBlockType.divider ? current.prefix : current.text;
+  final merged = MarkdownDocument.parse('$previousSource$carried').blocks.first;
   final next = document
       .replaceBlock(caret.blockIndex - 1, merged)
       .removeBlock(caret.blockIndex);
+  if (!_survivesReparse(next)) return DocumentEdit(document, caret);
   return DocumentEdit(
     next,
     DocumentCaret(
@@ -121,7 +136,9 @@ DocumentEdit changeIndent(
   final block = document.blocks[caret.blockIndex];
   // A raw block serializes its whole line from `text`, so rewriting `leading`
   // would move the caret without changing a single character of the source.
-  if (block.type == MarkdownBlockType.raw) {
+  // Indentation only means nesting on a list item; four spaces in front of a
+  // paragraph is an indented code block to every other Markdown renderer.
+  if (block.type == MarkdownBlockType.raw || !block.isListLike) {
     return DocumentEdit(document, caret);
   }
   final level = block.indentLevel;
@@ -129,14 +146,28 @@ DocumentEdit changeIndent(
   final clamped = _clamp(nextLevel, 3);
   if (clamped == level) return DocumentEdit(document, caret);
   final leading = '  ' * clamped;
-  final shifted = caret.offset + leading.length - block.leading.length;
-  return DocumentEdit(
-    document.replaceBlock(caret.blockIndex, block.copyWith(leading: leading)),
-    DocumentCaret(
-      blockIndex: caret.blockIndex,
-      offset: shifted < 0 ? 0 : shifted,
-    ),
+  final indented = block.copyWith(leading: leading);
+  final shifted = _clamp(
+    caret.offset + leading.length - block.leading.length,
+    indented.toSourceLine().length,
   );
+  return DocumentEdit(
+    document.replaceBlock(caret.blockIndex, indented),
+    DocumentCaret(blockIndex: caret.blockIndex, offset: shifted),
+  );
+}
+
+/// True when [next] parses back to exactly itself. A transformation that fails
+/// this looks right in memory and comes back different after a save: the
+/// classic case is a line of prose with three backticks becoming an unclosed
+/// code fence that swallows every block below it on reload.
+bool _survivesReparse(MarkdownDocument next) {
+  final reparsed = MarkdownDocument.parse(next.serialize());
+  if (reparsed.blocks.length != next.blocks.length) return false;
+  for (var i = 0; i < next.blocks.length; i++) {
+    if (reparsed.blocks[i] != next.blocks[i]) return false;
+  }
+  return true;
 }
 
 /// Block level formatting actions exposed by the editor toolbar.
@@ -378,8 +409,12 @@ String _continuationPrefix(MarkdownBlock block) {
 String _nextNumber(String prefix) {
   final match = _numberPattern.firstMatch(prefix);
   if (match == null) return prefix;
-  final value = int.parse(match.group(1)!) + 1;
-  return '$value${match.group(2)}';
+  final digits = match.group(1)!;
+  final value = '${int.parse(digits) + 1}';
+  // Keep the author's zero padding: rewriting `01.` as `2.` would be a second
+  // source normalization, and the parser only allows `[X]` becoming `[x]`.
+  final padded = value.padLeft(digits.length, '0');
+  return '$padded${match.group(2)}';
 }
 
 bool _holdsBlock(MarkdownDocument document, int index) =>
