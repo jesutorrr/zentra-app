@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zentra/presentation/note_surface.dart';
+import 'package:zentra/presentation/widgets/note_format_bar.dart';
 
 import '../support/owner_bound_widget_harness.dart';
 
@@ -80,7 +81,7 @@ void main() {
     expect(find.byKey(const ValueKey('note-details-action')), findsOneWidget);
   });
 
-  testWidgets('Reduced Motion removes the format bar animation',
+  testWidgets('Reduced Motion removes the format bar animation entirely',
       (tester) async {
     final harness = await createHarness();
     await pumpAt(
@@ -90,9 +91,25 @@ void main() {
       reduceMotion: true,
     );
 
-    final animated = tester.widget<AnimatedSize>(
-      find.byKey(const ValueKey('note-format-bar-slot')),
+    // Not an AnimatedSize with a zero duration: that combination re-dirties
+    // itself during its own layout and throws when the bar appears.
+    expect(find.byType(AnimatedSize), findsNothing);
+    expect(find.byKey(const ValueKey('note-format-bar-slot')), findsOneWidget);
+  });
+
+  testWidgets('the format bar can open with Reduced Motion on', (tester) async {
+    final harness = await createHarness();
+    await pumpAt(
+      tester,
+      harness,
+      size: const Size(390, 844),
+      reduceMotion: true,
     );
-    expect(animated.duration, Duration.zero);
+
+    await tester.tap(find.byKey(const ValueKey('note-title-heading')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(NoteFormatBar), findsOneWidget);
   });
 }

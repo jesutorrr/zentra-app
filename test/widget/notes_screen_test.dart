@@ -214,14 +214,8 @@ void main() {
     final harness = await createHarness();
     addTearDown(harness.database.close);
 
-    // Reduced Motion collapses the format bar animation to zero, and an
-    // AnimatedSize of that duration re-dirties itself while the bar appears.
     await tester.pumpWidget(
-      buildApp(
-        harness,
-        NoteSurface(noteId: harness.algebraId),
-        reduceMotion: false,
-      ),
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
     );
     await tester.pumpAndSettle();
 

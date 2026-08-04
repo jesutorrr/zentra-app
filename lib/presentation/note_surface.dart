@@ -165,13 +165,9 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
           padding: EdgeInsets.only(
             bottom: MediaQuery.viewInsetsOf(context).bottom,
           ),
-          child: AnimatedSize(
-            key: const ValueKey('note-format-bar-slot'),
-            duration: context.motionPolicy.duration(
-              const Duration(milliseconds: 180),
-            ),
-            alignment: Alignment.topCenter,
-            child: NoteFormatBar(
+          child: _formatBarSlot(
+            context,
+            NoteFormatBar(
               visible: _writing,
               activeCommand: _activeCommand,
               onCommand: _applyCommand,
@@ -237,6 +233,23 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
           },
         ),
       ),
+    );
+  }
+
+  /// Grows and shrinks the bar's slot, except when there is no animation to
+  /// give. An [AnimatedSize] with a zero duration re-dirties itself during its
+  /// own layout, so with Reduced Motion or a screen reader on it throws instead
+  /// of simply appearing.
+  Widget _formatBarSlot(BuildContext context, Widget child) {
+    const slot = ValueKey('note-format-bar-slot');
+    if (context.motionPolicy.reduceMotion) {
+      return KeyedSubtree(key: slot, child: child);
+    }
+    return AnimatedSize(
+      key: slot,
+      duration: const Duration(milliseconds: 180),
+      alignment: Alignment.topCenter,
+      child: child,
     );
   }
 
