@@ -1,5 +1,6 @@
 // lib/presentation/widgets/note_block_view.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../../domain/markdown_document.dart';
 import '../../domain/markdown_inline.dart';
@@ -9,6 +10,35 @@ import 'markdown_inline_spans.dart';
 
 /// Minimum touch target, in logical points, for the checklist box.
 const double _checkboxTarget = 44;
+
+/// What assistive technology is told a tap on a block does. Without it a tap
+/// only looks like a way to move the reading cursor.
+const String _editHint = 'Toca dos veces para editar el bloque';
+
+/// Everything a span list is built from. Blocks and text styles are immutable
+/// with value equality, so two equal keys always describe the same spans.
+typedef _SpanKey = (MarkdownBlock, TextStyle, Color);
+
+/// Tokenizing is the expensive half of rendering a block, and the editor
+/// rebuilds every block on every keystroke on purpose: its column keeps the
+/// active field's element, and therefore its focus, when the caret moves. The
+/// cache is what keeps that decision from costing a full pass over a long note
+/// each time a character is typed.
+final Map<_SpanKey, List<InlineSpan>> _spanCache = {};
+
+/// Roughly a screenful of blocks in each of the styles a note uses.
+const int _spanCacheLimit = 240;
+
+/// How many span lists were actually built, as opposed to reused. Only counted
+/// in debug builds.
+@visibleForTesting
+int debugNoteBlockSpanBuilds = 0;
+
+@visibleForTesting
+void debugResetNoteBlockSpanCache() {
+  _spanCache.clear();
+  debugNoteBlockSpanBuilds = 0;
+}
 
 /// Text style for the name of a note, wherever the note is shown.
 ///
@@ -76,14 +106,36 @@ class NoteBlockView extends StatelessWidget {
     return (block.codeLines.join('\n'), headerLength + 1);
   }
 
+  /// The role a screen reader announces in front of the block's own text.
+  ///
+  /// Null where another node already says it: a checklist item is announced by
+  /// its box, which also carries the checked state, and a paragraph has no
+  /// role to announce.
+  String? get _semanticRole => switch (block.type) {
+        MarkdownBlockType.heading => 'Encabezado nivel ${block.headingLevel}',
+        MarkdownBlockType.bulletItem => 'Elemento de lista',
+        MarkdownBlockType.numberedItem =>
+          'Elemento ${displayNumber ?? 1} de lista numerada',
+        MarkdownBlockType.quote => 'Cita',
+        MarkdownBlockType.codeFence => 'Bloque de código',
+        MarkdownBlockType.raw => 'Contenido sin formato',
+        MarkdownBlockType.checkItem ||
+        MarkdownBlockType.paragraph ||
+        MarkdownBlockType.divider =>
+          null,
+      };
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     if (block.type == MarkdownBlockType.divider) {
-      return Padding(
-        key: const ValueKey('note-block-divider'),
-        padding: EdgeInsets.symmetric(vertical: context.spacing.sm),
-        child: Divider(height: 1, color: colorScheme.outlineVariant),
+      return Semantics(
+        label: 'Separador',
+        child: Padding(
+          key: const ValueKey('note-block-divider'),
+          padding: EdgeInsets.symmetric(vertical: context.spacing.sm),
+          child: Divider(height: 1, color: colorScheme.outlineVariant),
+        ),
       );
     }
 
@@ -94,47 +146,100 @@ class NoteBlockView extends StatelessWidget {
             color: colorScheme.onSurfaceVariant,
           )
         : style;
-    final spans = _isLiteral
-        ? <InlineSpan>[TextSpan(text: _literalText.$1, style: baseStyle)]
-        : buildMarkdownSpans(
-            text: block.text,
-            baseStyle: baseStyle,
-            markerColor: colorScheme.onSurfaceVariant,
-            showMarkers: false,
-          );
+    final spans = _spansFor(baseStyle, colorScheme.onSurfaceVariant);
 
     final text = Text.rich(
       TextSpan(children: spans),
       key: const ValueKey('note-block-text'),
     );
 
-    return Semantics(
-      header: block.type == MarkdownBlockType.heading,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: block.indentLevel * context.spacing.md,
-          top: context.spacing.xxs,
-          bottom: context.spacing.xxs,
-        ),
-        child: _withLeadingAffordance(
-          context,
-          _tappable(context, text, spans),
-          TextSpan(children: spans).toPlainText(),
-        ),
+    final visibleText = TextSpan(children: spans).toPlainText().trim();
+    final role = _semanticRole;
+    final label = role == null
+        ? null
+        : (visibleText.isEmpty ? role : '$role: $visibleText');
+
+    final content = Padding(
+      padding: EdgeInsets.only(
+        left: block.indentLevel * context.spacing.md,
+        top: context.spacing.xxs,
+        bottom: context.spacing.xxs,
+      ),
+      child: _withLeadingAffordance(
+        context,
+        _tappable(context, text, spans, semantic: label == null),
+        visibleText,
       ),
     );
+    // Wrapped only when there is something to say. An annotation with no
+    // properties still publishes a node, and an empty one is one more stop a
+    // screen reader user has to swipe through.
+    if (label == null) return content;
+
+    return Semantics(
+      header: block.type == MarkdownBlockType.heading,
+      label: label,
+      hint: onTapAtOffset == null ? null : _editHint,
+      onTap: onTapAtOffset == null ? null : _activateFromSemantics,
+      // A block with a role reads as one line: its marker, its bullet glyph
+      // and its number are decoration the label already accounts for.
+      excludeSemantics: true,
+      child: content,
+    );
   }
+
+  /// The spans for this block, built once per block, style and marker colour.
+  List<InlineSpan> _spansFor(TextStyle baseStyle, Color markerColor) {
+    final key = (block, baseStyle, markerColor);
+    final cached = _spanCache[key];
+    if (cached != null) return cached;
+    final spans = List<InlineSpan>.unmodifiable(
+      _isLiteral
+          ? <InlineSpan>[TextSpan(text: _literalText.$1, style: baseStyle)]
+          : buildMarkdownSpans(
+              text: block.text,
+              baseStyle: baseStyle,
+              markerColor: markerColor,
+              showMarkers: false,
+            ),
+    );
+    assert(() {
+      debugNoteBlockSpanBuilds++;
+      return true;
+    }());
+    if (_spanCache.length >= _spanCacheLimit) {
+      _spanCache.remove(_spanCache.keys.first);
+    }
+    _spanCache[key] = spans;
+    return spans;
+  }
+
+  /// A semantic activation carries no position, so it lands at the start of
+  /// the block's text rather than nowhere at all.
+  void _activateFromSemantics() => onTapAtOffset?.call(_sourceOffsetFor(0));
 
   /// Wraps the rendered text so a tap reports where the caret should land on
   /// the source line. Only the text is wrapped: the checklist box owns its own
   /// gesture and must not be shadowed by this one.
-  Widget _tappable(BuildContext context, Widget text, List<InlineSpan> spans) {
+  ///
+  /// [semantic] adds the assistive tap here, for the blocks whose own node
+  /// does not carry one.
+  Widget _tappable(
+    BuildContext context,
+    Widget text,
+    List<InlineSpan> spans, {
+    required bool semantic,
+  }) {
     final handler = onTapAtOffset;
     if (handler == null) return text;
-    return LayoutBuilder(
+    final detector = LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
+          // Its own semantic tap would report the centre of the block as the
+          // position, dropping an assistive user in the middle of a word. The
+          // action published below lands on the first character instead.
+          excludeFromSemantics: true,
           onTapUp: (details) => handler(
             _sourceOffsetForTap(
               context,
@@ -146,6 +251,16 @@ class NoteBlockView extends StatelessWidget {
           child: text,
         );
       },
+    );
+    if (!semantic) return detector;
+    // `onTapUp` alone publishes no semantic action, so the block would be
+    // unreachable by anything but a real finger.
+    return MergeSemantics(
+      child: Semantics(
+        hint: _editHint,
+        onTap: _activateFromSemantics,
+        child: detector,
+      ),
     );
   }
 
@@ -164,9 +279,9 @@ class NoteBlockView extends StatelessWidget {
               child: Semantics(
                 key: const ValueKey('note-block-checkbox'),
                 checked: block.checked,
-                label: visibleText.trim().isEmpty
+                label: visibleText.isEmpty
                     ? 'Casilla vacía'
-                    : 'Casilla: ${visibleText.trim()}',
+                    : 'Casilla: $visibleText',
                 child: SizedBox(
                   width: _checkboxTarget,
                   height: _checkboxTarget,
@@ -175,6 +290,15 @@ class NoteBlockView extends StatelessWidget {
                         ? null
                         : () {
                             triggerHaptic(HapticType.light);
+                            // VoiceOver reads the flipped state on its own,
+                            // TalkBack and Switch Control do not always.
+                            SemanticsService.sendAnnouncement(
+                              View.of(context),
+                              block.checked
+                                  ? 'Casilla sin marcar'
+                                  : 'Casilla marcada',
+                              Directionality.of(context),
+                            );
                             onToggleCheck!();
                           },
                     customBorder: const CircleBorder(),
@@ -256,10 +380,25 @@ class NoteBlockView extends StatelessWidget {
     List<InlineSpan> spans,
     double maxWidth,
   ) {
+    // Everything a `Text` resolves from its context, resolved the same way
+    // here. The two agree today only because the Material text theme styles
+    // do not inherit; an ancestor `DefaultTextStyle` would otherwise lay the
+    // line out differently and put the caret a character off.
+    final defaults = DefaultTextStyle.of(context);
+    var style = defaults.style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
     final painter = TextPainter(
-      text: TextSpan(children: spans),
+      text: TextSpan(style: style, children: spans),
+      textAlign: defaults.textAlign ?? TextAlign.start,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
+      maxLines: defaults.maxLines,
+      locale: Localizations.maybeLocaleOf(context),
+      textWidthBasis: defaults.textWidthBasis,
+      textHeightBehavior: defaults.textHeightBehavior ??
+          DefaultTextHeightBehavior.maybeOf(context),
     )..layout(maxWidth: maxWidth);
     final visibleOffset = painter.getPositionForOffset(localPosition).offset;
     painter.dispose();

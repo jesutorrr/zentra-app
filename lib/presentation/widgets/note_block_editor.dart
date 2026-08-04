@@ -187,18 +187,23 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
         continue;
       }
       children.add(
-        NoteBlockView(
+        // A boundary per block so a keystroke in the active field repaints
+        // that field alone instead of every rendered block above and below.
+        RepaintBoundary(
           key: ValueKey('note-block-$index'),
-          block: block,
-          displayNumber: number == 0 ? null : number,
-          onToggleCheck: block.type == MarkdownBlockType.checkItem
-              ? () => widget.onChanged(
-                    widget.document.replaceBlock(index, block.toggleChecked()),
-                  )
-              : null,
-          onTapAtOffset: widget.readOnly
-              ? null
-              : (offset) => _activate(index, offset: offset),
+          child: NoteBlockView(
+            block: block,
+            displayNumber: number == 0 ? null : number,
+            onToggleCheck: block.type == MarkdownBlockType.checkItem
+                ? () => widget.onChanged(
+                      widget.document
+                          .replaceBlock(index, block.toggleChecked()),
+                    )
+                : null,
+            onTapAtOffset: widget.readOnly
+                ? null
+                : (offset) => _activate(index, offset: offset),
+          ),
         ),
       );
     }
