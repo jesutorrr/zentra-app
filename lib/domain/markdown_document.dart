@@ -64,6 +64,32 @@ class MarkdownBlock {
       type == MarkdownBlockType.numberedItem ||
       type == MarkdownBlockType.checkItem;
 
+  /// Rebuilds the exact source line or lines this block came from.
+  String toSourceLine() {
+    if (type == MarkdownBlockType.raw) return text;
+    if (type != MarkdownBlockType.codeFence) {
+      return '$leading$prefix$text';
+    }
+    final buffer = StringBuffer('$leading$prefix$language');
+    for (final line in codeLines) {
+      buffer
+        ..write('\n')
+        ..write(line);
+    }
+    if (fenceClose != null) buffer.write('\n$fenceClose');
+    return buffer.toString();
+  }
+
+  /// Flips a checklist box, rewriting only the character inside the brackets.
+  MarkdownBlock toggleChecked() {
+    if (type != MarkdownBlockType.checkItem) return this;
+    final next = !checked;
+    return copyWith(
+      prefix: prefix.replaceFirst(RegExp(r'\[[ xX]\]'), next ? '[x]' : '[ ]'),
+      checked: next,
+    );
+  }
+
   MarkdownBlock copyWith({
     MarkdownBlockType? type,
     String? leading,
@@ -191,6 +217,26 @@ class MarkdownDocument {
       index++;
     }
     return MarkdownDocument(List.unmodifiable(parsed));
+  }
+
+  String serialize() => blocks.map((block) => block.toSourceLine()).join('\n');
+
+  MarkdownDocument replaceBlock(int index, MarkdownBlock block) {
+    final next = [...blocks]..[index] = block;
+    return MarkdownDocument(List.unmodifiable(next));
+  }
+
+  MarkdownDocument insertBlock(int index, MarkdownBlock block) {
+    final next = [...blocks]..insert(index, block);
+    return MarkdownDocument(List.unmodifiable(next));
+  }
+
+  MarkdownDocument removeBlock(int index) {
+    if (blocks.length == 1) {
+      return const MarkdownDocument([MarkdownBlock.paragraph()]);
+    }
+    final next = [...blocks]..removeAt(index);
+    return MarkdownDocument(List.unmodifiable(next));
   }
 
   static MarkdownBlock _parseLine(String line, String leading, String rest) {
