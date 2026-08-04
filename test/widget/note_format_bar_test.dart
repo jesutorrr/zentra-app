@@ -9,6 +9,9 @@ import 'package:zentra/presentation/widgets/note_format_bar.dart';
 
 const _marker = Color(0xFF999999);
 
+/// The zero width space the editor keeps in front of the active field's text.
+const _sentinel = '\u200B';
+
 /// Lines the highlight controller has to hand back untouched. A `TextField`
 /// aligns its caret by counting characters through the spans it is given, so a
 /// single one added, dropped or reordered puts the caret on the wrong letter.
@@ -80,14 +83,39 @@ void main() {
         onRedo: () {},
       );
 
+  // Every command acts on the block under the caret, so the bar may only be
+  // on screen while the body holds one. Driven from a real focus change: the
+  // `visible` flag on its own says nothing about when the screen sets it.
   testWidgets('the bar is hidden until the body has focus', (tester) async {
+    var document = MarkdownDocument.parse('nota');
+    DocumentCaret? caret;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: NoteFormatBar(visible: false, onCommand: (_) {}),
+          body: StatefulBuilder(
+            builder: (context, setState) => Column(
+              children: [
+                NoteBlockEditor(
+                  document: document,
+                  onChanged: (next) => setState(() => document = next),
+                  onCaretChanged: (value) => setState(() => caret = value),
+                ),
+                const TextField(key: ValueKey('otro-campo')),
+                NoteFormatBar(visible: caret != null, onCommand: (_) {}),
+              ],
+            ),
+          ),
         ),
       ),
     );
+    expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
+
+    await tester.tap(find.text('nota'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('note-format-bar')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('otro-campo')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('note-format-bar')), findsNothing);
   });
 
@@ -350,33 +378,69 @@ void main() {
     expect(rebuilt, _corpus);
   });
 
-  testWidgets('an open composing region leaves the text intact', (
+  // An IME hands its buffer over as a composing region and re-commits it,
+  // duplicating characters, the moment the field stops reporting one. The
+  // region has to survive both the painting and a rewrite from the screen.
+  testWidgets('an open composing region survives being painted', (
     tester,
   ) async {
-    final controller = makeController()
-      ..value = const TextEditingValue(
-        text: 'hola **mun**do',
-        selection: TextSelection.collapsed(offset: 11),
-        composing: TextRange(start: 7, end: 10),
-      );
-    late TextSpan span;
+    const composing = TextRange(start: 8, end: 11);
+    var document = MarkdownDocument.parse('hola **mun**do');
+    late StateSetter rebuild;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: Builder(
-            builder: (context) {
-              span = controller.buildTextSpan(
-                context: context,
-                style: const TextStyle(fontSize: 16),
-                withComposing: true,
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return NoteBlockEditor(
+                document: document,
+                onChanged: (next) => setState(() => document = next),
+                onCaretChanged: (_) {},
               );
-              return const SizedBox();
             },
           ),
         ),
       ),
     );
-    expect(span.toPlainText(), 'hola **mun**do');
+    await tester.tap(find.textContaining('hola'));
+    await tester.pumpAndSettle();
+
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '${_sentinel}hola **mun**do',
+        selection: TextSelection.collapsed(offset: 11),
+        composing: composing,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    final controller = field.controller! as MarkdownHighlightController;
+    expect(controller.value.composing, composing);
+    expect(
+      controller.text.substring(composing.start, composing.end),
+      'mun',
+      reason: 'the region has to keep covering the letters the IME opened it '
+          'over',
+    );
+
+    // A second block arriving from the screen while the composition is open.
+    rebuild(
+      () => document = MarkdownDocument.parse('hola **mun**do\nsegunda'),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.value.composing, composing);
+
+    // And the painted spans still rebuild the text character for character,
+    // which is what keeps the caret on the letter the user is composing.
+    final context = tester.element(find.byType(TextField));
+    final span = controller.buildTextSpan(
+      context: context,
+      style: field.style,
+      withComposing: true,
+    );
+    expect(span.toPlainText(), controller.text);
   });
 
   // The editor is the only caller that matters: if it kept a plain controller
