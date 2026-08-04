@@ -140,7 +140,10 @@ se ocultan (bloque renderizado).
 No habrá selección continua entre bloques mientras se edita. Se compensa con:
 
 - Modo lectura envuelto en `SelectionArea`, con selección y copiado de corrido.
-- Acción "Seleccionar todo" que copia el Markdown crudo completo.
+- Acción explícita "Copiar Markdown" que lleva el cuerpo crudo completo al
+  portapapeles. Se prefiere una acción propia sobre redefinir lo que hace
+  "Seleccionar todo", porque cambiar la semántica del menú del sistema es
+  frágil y sorprende al usuario.
 
 ## 6. Superficie única de lectura y escritura
 
