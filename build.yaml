@@ -1,10 +1,6 @@
 targets:
   $default:
     builders:
-      freezed:
-        generate_for:
-          include:
-            - lib/domain/**
       json_serializable:
         generate_for:
           include:

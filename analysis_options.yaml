@@ -39,6 +39,8 @@ linter:
 
 analyzer:
   exclude:
+    - "flutter/**"
+    - "tool/**"
     - "**/*.g.dart"
     - "**/*.freezed.dart"
   errors:
