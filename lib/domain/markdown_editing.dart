@@ -225,17 +225,32 @@ DocumentEdit applyBlockCommand(
   }
 
   final nextPrefix = _nextPrefixFor(block, command);
+  // A divider keeps all of its characters in `prefix` and has no text, so
+  // rebuilding from `text` alone would delete the rule instead of prefixing
+  // it, and no command puts those characters back.
+  final isDivider = block.type == MarkdownBlockType.divider;
+  final payload = isDivider ? block.prefix : block.text;
   final rebuilt = MarkdownDocument.parse(
-    '${block.leading}$nextPrefix${block.text}',
+    '${block.leading}$nextPrefix$payload',
   ).blocks.first;
+  // Dropping the marker off a line whose text starts with three backticks
+  // opens a fence, and an open fence reads every block below it as code.
+  if (rebuilt.type == MarkdownBlockType.codeFence) {
+    return DocumentEdit(document, caret);
+  }
+  final next = document.replaceBlock(caret.blockIndex, rebuilt);
+  if (!_survivesReparse(next)) return DocumentEdit(document, caret);
   final length = rebuilt.toSourceLine().length;
   final lower = _clamp(block.leading.length, length);
+  // The divider's prefix stays on the line as text, so nothing was removed in
+  // front of the caret and only the new marker shifts it.
+  final removed = isDivider ? 0 : block.prefix.length;
   return DocumentEdit(
-    document.replaceBlock(caret.blockIndex, rebuilt),
+    next,
     DocumentCaret(
       blockIndex: caret.blockIndex,
       offset: _clampRange(
-        caret.offset + nextPrefix.length - block.prefix.length,
+        caret.offset + nextPrefix.length - removed,
         lower,
         length,
       ),
@@ -381,11 +396,19 @@ DocumentEdit wrapSelection(
     caretEnd = to + marker.length;
   }
 
+  final rebuiltBlock = MarkdownDocument.parse(rebuilt).blocks.first;
+  final unchanged = DocumentEdit(
+    document,
+    DocumentCaret(blockIndex: blockIndex, offset: to),
+  );
+  // Markers that add up to three backticks stop being text: the fence they
+  // open reads every block below it as code.
+  if (rebuiltBlock.type == MarkdownBlockType.codeFence) return unchanged;
+  final next = document.replaceBlock(blockIndex, rebuiltBlock);
+  if (!_survivesReparse(next)) return unchanged;
+
   return DocumentEdit(
-    document.replaceBlock(
-      blockIndex,
-      MarkdownDocument.parse(rebuilt).blocks.first,
-    ),
+    next,
     DocumentCaret(blockIndex: blockIndex, offset: caretEnd),
   );
 }
