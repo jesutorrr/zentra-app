@@ -1,7 +1,12 @@
 // lib/presentation/widgets/note_details_panel.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/note_controller.dart';
+import '../../application/session_controller.dart';
+import '../../domain/note_models.dart';
 import '../design_tokens.dart';
+import 'note_tag_field.dart';
 
 /// Smallest touch target the panel hands out, in logical points.
 const double _touchTarget = 44;
@@ -22,6 +27,11 @@ const _accentOptions = <String>[
 /// about what a note carries.
 class NoteDetailsPanel extends StatelessWidget {
   final VoidCallback onReminder;
+
+  /// The note's tags, as the comma separated text the note surface owns.
+  ///
+  /// Keeping the channel outside the panel is what lets a tag survive the
+  /// sheet being dismissed and reopened before the note reaches disk.
   final TextEditingController tagsController;
   final String accentKey;
   final ValueChanged<String> onAccentChanged;
@@ -88,17 +98,7 @@ class NoteDetailsPanel extends StatelessWidget {
               onTap: onFocus,
             ),
             SizedBox(height: context.spacing.md),
-            TextField(
-              key: const ValueKey('note-tags-field'),
-              controller: tagsController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Etiquetas',
-                hintText: 'estudio, examen',
-                prefixIcon: Icon(Icons.sell_outlined),
-                helperText: 'Sepáralas con comas.',
-              ),
-            ),
+            _NoteTagsSection(controller: tagsController),
             SizedBox(height: context.spacing.md),
             Text('Acento', style: theme.textTheme.labelLarge),
             SizedBox(height: context.spacing.xs),
@@ -129,6 +129,35 @@ class NoteDetailsPanel extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Puts the chip editor on top of the surface's comma separated channel, and
+/// feeds it the vocabulary the owner has already written.
+///
+/// The suggestions are read here rather than passed in because the panel is
+/// the only part of the note surface that has any use for the owner's other
+/// notes, and the surface has no other reason to watch them.
+class _NoteTagsSection extends ConsumerWidget {
+  final TextEditingController controller;
+
+  const _NoteTagsSection({required this.controller});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ownerId = ref.watch(activeOwnerIdProvider);
+    final suggestions = ownerId == null
+        ? const <String>[]
+        : ref.watch(noteControllerProvider(ownerId)).valueOrNull?.allTags ??
+            const <String>[];
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => NoteTagField(
+        value: normalizeNoteTags(controller.text.split(',')),
+        suggestions: suggestions,
+        onChanged: (next) => controller.text = next.join(', '),
       ),
     );
   }

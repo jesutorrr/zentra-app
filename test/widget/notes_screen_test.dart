@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -138,6 +140,8 @@ void main() {
     expect(find.text('Repasar Álgebra lineal'), findsOneWidget);
     expect(find.text('Ideas para Zentra'), findsNothing);
 
+    await tester.ensureVisible(find.text('Repasar Álgebra lineal'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Repasar Álgebra lineal'));
     await tester.pumpAndSettle();
 
@@ -230,6 +234,84 @@ void main() {
 
     final saved = await harness.repository.getNote(harness.algebraId);
     expect(saved?.body, 'Contenido actualizado desde el editor.');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tag filter narrows the library and never traps the reader',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+    final semantics = tester.ensureSemantics();
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    final filterBar = find.byKey(const ValueKey('notes-tag-filter'));
+    final producto = find.byKey(const ValueKey('notes-tag-filter-producto'));
+    expect(filterBar, findsOneWidget);
+    expect(producto, findsOneWidget);
+    expect(tester.getSize(producto).height, greaterThanOrEqualTo(44));
+
+    await tester.ensureVisible(producto);
+    await tester.pumpAndSettle();
+    await tester.tap(producto);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ideas para Zentra'), findsOneWidget);
+    expect(find.text('Repasar Álgebra lineal'), findsNothing);
+    expect(
+      tester
+          .getSemantics(producto)
+          .getSemanticsData()
+          .flagsCollection
+          .isSelected,
+      Tristate.isTrue,
+    );
+
+    // Pinned holds only the algebra note, which does not carry this tag, so
+    // the reader lands on an empty list and must still see the way back.
+    await tester.tap(find.byKey(const ValueKey('notes-section-pinned')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ideas para Zentra'), findsNothing);
+    expect(find.text('Repasar Álgebra lineal'), findsNothing);
+    expect(filterBar, findsOneWidget);
+
+    final all = find.byKey(const ValueKey('notes-tag-filter-all'));
+    await tester.ensureVisible(all);
+    await tester.pumpAndSettle();
+    await tester.tap(all);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Repasar Álgebra lineal'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(producto)
+          .getSemanticsData()
+          .flagsCollection
+          .isSelected,
+      Tristate.isFalse,
+    );
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  testWidgets('tag filter offers every tag the owner has used', (tester) async {
+    await configureDevice(tester, logicalSize: const Size(834, 1194));
+    final harness = await createHarness();
+    addTearDown(harness.database.close);
+
+    await tester.pumpWidget(buildApp(harness, const NotesScreen()));
+    await tester.pumpAndSettle();
+
+    for (final tag in const ['estudio', 'examen', 'producto']) {
+      expect(
+        find.byKey(ValueKey('notes-tag-filter-$tag')),
+        findsOneWidget,
+        reason: 'expected a filter chip for $tag',
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 }

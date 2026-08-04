@@ -29,6 +29,7 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
   NotesLibrarySection _section = NotesLibrarySection.recent;
   String _query = '';
   String? _selectedNoteId;
+  String? _tagFilter;
 
   @override
   void dispose() {
@@ -124,6 +125,10 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
                             });
                           },
                         ),
+                        if (noteState.allTags.isNotEmpty) ...[
+                          SizedBox(height: context.spacing.sm),
+                          _buildTagFilter(context, noteState),
+                        ],
                       ],
                     );
 
@@ -266,11 +271,68 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
     );
   }
 
+  /// Horizontal strip of the owner's tags.
+  ///
+  /// It sits above the list on purpose: a filter that leaves nothing to read
+  /// must never hide the control that emptied the screen, and the leading
+  /// chip is an explicit way back for a reader who does not know that tapping
+  /// the chosen tag again undoes it.
+  Widget _buildTagFilter(BuildContext context, NoteState state) {
+    final active = _activeTagFilter(state);
+    return Semantics(
+      label: 'Filtrar por etiqueta',
+      child: SingleChildScrollView(
+        key: const ValueKey('notes-tag-filter'),
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            FilterChip(
+              key: const ValueKey('notes-tag-filter-all'),
+              label: const Text('Todas'),
+              selected: active == null,
+              onSelected: (_) => _selectTag(null),
+            ),
+            for (final tag in state.allTags)
+              Padding(
+                padding: EdgeInsetsDirectional.only(start: context.spacing.xs),
+                child: FilterChip(
+                  key: ValueKey('notes-tag-filter-$tag'),
+                  label: Text(tag),
+                  selected: active == tag,
+                  onSelected: (selected) => _selectTag(selected ? tag : null),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The chosen tag, but only while the owner still has a note carrying it.
+  ///
+  /// Dropping the last note with a tag would otherwise leave the library
+  /// filtered by something the strip no longer offers to unselect.
+  String? _activeTagFilter(NoteState state) {
+    final tag = _tagFilter;
+    if (tag == null || !state.allTags.contains(tag)) return null;
+    return tag;
+  }
+
+  void _selectTag(String? tag) {
+    setState(() {
+      _tagFilter = tag;
+      _selectedNoteId = null;
+    });
+  }
+
   List<Note> _visibleNotes(NoteState state) {
     final source = state.filteredNotes;
     final normalized = _normalize(_query.trim());
+    final tagFilter = _activeTagFilter(state);
     final filtered = source.where((note) {
       if (!_belongsToSection(state, note)) return false;
+      if (tagFilter != null && !note.tags.contains(tagFilter)) return false;
       if (normalized.isEmpty) return true;
       return _normalize(note.title).contains(normalized) ||
           _normalize(note.body).contains(normalized) ||
