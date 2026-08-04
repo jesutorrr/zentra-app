@@ -20,6 +20,7 @@ import 'pomodoro_screen.dart';
 import 'utils/page_transitions.dart';
 import 'widgets/markdown_inline_spans.dart';
 import 'widgets/note_block_editor.dart';
+import 'widgets/note_block_view.dart';
 import 'widgets/note_details_panel.dart';
 import 'widgets/note_format_bar.dart';
 import 'widgets/notes_components.dart';
@@ -393,7 +394,7 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   /// The title is a plain heading until the note is being written, so a note
   /// that is only being read shows no field and no caret anywhere.
   Widget _buildTitle(BuildContext context) {
-    final style = Theme.of(context).textTheme.headlineSmall;
+    final style = noteTitleTextStyle(context);
     if (_writing) {
       return TextField(
         key: const ValueKey('note-title-field'),

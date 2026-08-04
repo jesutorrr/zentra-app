@@ -10,6 +10,18 @@ import 'markdown_inline_spans.dart';
 /// Minimum touch target, in logical points, for the checklist box.
 const double _checkboxTarget = 44;
 
+/// Text style for the name of a note, wherever the note is shown.
+///
+/// One step of the type scale above the `#` block, which is the tallest thing
+/// the body can hold. Both used to be `headlineSmall`, so a note opening with
+/// a heading showed two titles of the same size stacked on each other.
+///
+/// The heading ramp below is left alone rather than demoted: every level of it
+/// already sits at or above the body text it introduces, and pushing it down a
+/// step would put `###` under the paragraphs it heads.
+TextStyle? noteTitleTextStyle(BuildContext context) =>
+    Theme.of(context).textTheme.headlineMedium;
+
 /// Text style for a block, shared by the rendered view and the active editor
 /// so switching between them never shifts the text.
 TextStyle noteBlockTextStyle(BuildContext context, MarkdownBlock block) {

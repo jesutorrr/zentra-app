@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zentra/domain/markdown_document.dart';
+import 'package:zentra/presentation/theme.dart';
 import 'package:zentra/presentation/widgets/note_block_view.dart';
 
 Widget host(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -113,5 +114,39 @@ void main() {
       host(NoteBlockView(block: blockOf('```\nlet a = **b**;\n```'))),
     );
     expect(find.textContaining('**b**'), findsOneWidget);
+  });
+
+  // The note's name and its tallest heading were the same size, so a note that
+  // opened with `#` showed two titles stacked. The ramp below has to keep
+  // descending without ever dropping under the body it introduces.
+  testWidgets('the title outranks every heading, and none sink under the body',
+      (tester) async {
+    late double title;
+    late List<double> headings;
+    late double body;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Builder(
+          builder: (context) {
+            title = noteTitleTextStyle(context)!.fontSize!;
+            headings = [
+              for (final source in const ['# uno', '## dos', '### tres'])
+                noteBlockTextStyle(context, blockOf(source)).fontSize!,
+            ];
+            body = noteBlockTextStyle(context, blockOf('texto')).fontSize!;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(title, greaterThan(headings.first));
+    for (var i = 1; i < headings.length; i++) {
+      expect(headings[i], lessThanOrEqualTo(headings[i - 1]));
+    }
+    for (final heading in headings) {
+      expect(heading, greaterThanOrEqualTo(body));
+    }
   });
 }

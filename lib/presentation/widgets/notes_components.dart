@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../domain/markdown_document.dart';
 import '../design_tokens.dart';
 import 'note_block_editor.dart';
+import 'note_block_view.dart';
 
 enum NotesLibrarySection {
   review('Para repasar', Icons.notifications_active_outlined),
@@ -556,7 +559,7 @@ class NoteDetailSurface extends StatelessWidget {
             SizedBox(height: context.spacing.md),
             Text(
               title.trim().isEmpty ? 'Nota sin título' : title,
-              style: theme.textTheme.headlineSmall,
+              style: noteTitleTextStyle(context),
             ),
             SizedBox(height: context.spacing.xs),
             Text(
@@ -737,6 +740,14 @@ class NoteSaveStatus extends StatelessWidget {
     super.key,
   });
 
+  /// Size of the leading glyph, in logical points.
+  static const double _glyphSize = 18;
+
+  /// Narrowest a Material button gets, whatever it holds.
+  static const double _minButtonWidth = 64;
+
+  static const String _retryLabel = 'Reintentar';
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -762,33 +773,110 @@ class NoteSaveStatus extends StatelessWidget {
           colorScheme.error,
         ),
     };
+    final retries = state == NoteSaveVisualState.error && onRetry != null;
 
     return Semantics(
       liveRegion: true,
       label: label,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: color),
-          SizedBox(width: context.spacing.xxs),
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: color,
-                  ),
-            ),
-          ),
-          if (state == NoteSaveVisualState.error && onRetry != null) ...[
-            SizedBox(width: context.spacing.xs),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Reintentar'),
-            ),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (!_fits(context, label, constraints.maxWidth, retries)) {
+            return _glyphOnly(context, icon, label, color, retries);
+          }
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: _glyphSize, color: color),
+              SizedBox(width: context.spacing.xxs),
+              Text(
+                label,
+                key: const ValueKey('note-save-label'),
+                maxLines: 1,
+                softWrap: false,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: color,
+                    ),
+              ),
+              if (retries) ...[
+                SizedBox(width: context.spacing.xs),
+                TextButton(
+                  key: const ValueKey('note-save-retry'),
+                  onPressed: onRetry,
+                  child: const Text(_retryLabel),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
+  }
+
+  /// What is left when the app bar has no room for the word: the glyph alone,
+  /// still tappable while there is something to retry.
+  ///
+  /// The word is dropped whole rather than clipped, because a state ellipsized
+  /// to `Sin …` says less than the glyph it sits next to, and the reader who
+  /// cannot see either still gets the full label from the live region above.
+  Widget _glyphOnly(
+    BuildContext context,
+    IconData icon,
+    String label,
+    Color color,
+    bool retries,
+  ) {
+    if (!retries) return Icon(icon, size: _glyphSize, color: color);
+    return IconButton(
+      key: const ValueKey('note-save-retry'),
+      tooltip: _retryLabel,
+      onPressed: onRetry,
+      icon: Icon(icon, color: color, semanticLabel: '$label. $_retryLabel.'),
+    );
+  }
+
+  /// Whether the word next to the glyph still has room.
+  ///
+  /// Measured rather than guessed at a breakpoint: the app bar hands the title
+  /// whatever its actions leave over, and that changes with the writing mode,
+  /// the window and the reader's text size all at once.
+  bool _fits(
+    BuildContext context,
+    String label,
+    double available,
+    bool retries,
+  ) {
+    if (!available.isFinite) return true;
+    final theme = Theme.of(context);
+    var needed = _glyphSize +
+        context.spacing.xxs +
+        _textWidth(context, label, theme.textTheme.labelLarge);
+    if (retries) {
+      final button = theme.textButtonTheme.style;
+      final padding =
+          button?.padding?.resolve(const <WidgetState>{})?.horizontal ?? 0;
+      final text = _textWidth(
+        context,
+        _retryLabel,
+        button?.textStyle?.resolve(const <WidgetState>{}) ??
+            theme.textTheme.labelLarge,
+      );
+      needed += context.spacing.xs + math.max(_minButtonWidth, text + padding);
+    }
+    // A little slack, so a rounding difference between this measurement and
+    // the real layout can never become an overflow.
+    return needed + context.spacing.xxs <= available;
+  }
+
+  double _textWidth(BuildContext context, String text, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 }
 
@@ -819,11 +907,15 @@ class _NotePill extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: color),
           SizedBox(width: context.spacing.xxs),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: color,
-                ),
+          // A long tag at a large text size is wider than the card that holds
+          // it, so the pill grows a second line instead of running over.
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: color,
+                  ),
+            ),
           ),
         ],
       ),
