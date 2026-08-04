@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/note_controller.dart';
@@ -17,6 +18,7 @@ import 'motion_policy.dart';
 import 'note_reminder_screen.dart';
 import 'pomodoro_screen.dart';
 import 'utils/page_transitions.dart';
+import 'widgets/markdown_inline_spans.dart';
 import 'widgets/note_block_editor.dart';
 import 'widgets/note_details_panel.dart';
 import 'widgets/note_format_bar.dart';
@@ -57,6 +59,7 @@ class NoteSurface extends ConsumerStatefulWidget {
 class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
+  final TextEditingController _rawController = TextEditingController();
   final FocusNode _titleFocus = FocusNode();
   final NoteBlockEditorController _editorController =
       NoteBlockEditorController();
@@ -76,8 +79,18 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
   bool _allowPop = false;
   bool _detailsExpanded = true;
   bool _h1BannerDismissed = false;
+  bool _rawMode = false;
+
+  /// The body as it stands right now.
+  ///
+  /// In plain text mode the field is the only source of truth: the document
+  /// behind it is deliberately left unparsed until the reader leaves, so a save
+  /// that read the document would write back text the reader has replaced.
+  String get _currentBody =>
+      _rawMode ? _rawController.text : _document.serialize();
 
   bool get _showsH1Banner =>
+      !_rawMode &&
       !_h1BannerDismissed &&
       _titleController.text.trim().isEmpty &&
       _document.blocks.isNotEmpty &&
@@ -91,6 +104,7 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
     _tagsController
       ..removeListener(_markDirty)
       ..dispose();
+    _rawController.dispose();
     _titleFocus.dispose();
     _editorController.dispose();
     super.dispose();
@@ -138,6 +152,29 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
               onPressed: _openReminder,
               icon: const Icon(Icons.notifications_none_rounded),
             ),
+            IconButton(
+              key: const ValueKey('note-copy-markdown'),
+              tooltip: 'Copiar Markdown',
+              onPressed: _copyMarkdown,
+              icon: const Icon(
+                Icons.copy_all_rounded,
+                semanticLabel: 'Copiar Markdown',
+              ),
+            ),
+            IconButton(
+              key: const ValueKey('note-raw-mode'),
+              tooltip: _rawMode ? 'Volver al editor' : 'Editar como texto',
+              onPressed: _toggleRawMode,
+              icon: _rawMode
+                  ? const Icon(
+                      Icons.view_agenda_outlined,
+                      semanticLabel: 'Volver al editor',
+                    )
+                  : const Icon(
+                      Icons.text_snippet_outlined,
+                      semanticLabel: 'Editar como texto',
+                    ),
+            ),
             if (!usesSideColumn)
               IconButton(
                 key: const ValueKey('note-details-action'),
@@ -168,7 +205,9 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
           child: _formatBarSlot(
             context,
             NoteFormatBar(
-              visible: _writing,
+              // Every command on the bar acts on the block under the caret,
+              // and plain text mode has no blocks and no caret to act on.
+              visible: _writing && !_rawMode,
               activeCommand: _activeCommand,
               onCommand: _applyCommand,
               onBold: () => _wrap(MarkdownInlineStyle.bold),
@@ -261,13 +300,48 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
         _buildTitle(context),
         if (_showsH1Banner) _buildH1Banner(context),
         SizedBox(height: context.spacing.sm),
-        NoteBlockEditor(
-          document: _document,
-          controller: _editorController,
-          onChanged: _onDocumentChanged,
-          onCaretChanged: _onCaretChanged,
-        ),
+        if (_rawMode)
+          _buildRawField(context)
+        else
+          NoteBlockEditor(
+            document: _document,
+            controller: _editorController,
+            onChanged: _onDocumentChanged,
+            onCaretChanged: _onCaretChanged,
+          ),
       ],
+    );
+  }
+
+  /// The whole body as literal Markdown, the way out when the block editor
+  /// cannot show or repair something.
+  ///
+  /// Nothing typed here is parsed until the reader leaves the mode, so even
+  /// text that never becomes a valid block is kept exactly as written.
+  Widget _buildRawField(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(
+          height: 1.5,
+          fontFamily: monospaceFontFamilies.first,
+          fontFamilyFallback: monospaceFontFamilies.sublist(1),
+        );
+    return ConstrainedBox(
+      // An empty note would otherwise leave a single line to aim at.
+      constraints: const BoxConstraints(minHeight: _touchTarget),
+      child: TextField(
+        key: const ValueKey('note-raw-field'),
+        controller: _rawController,
+        maxLines: null,
+        style: style,
+        decoration: const InputDecoration(
+          hintText: 'Markdown de la nota',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          contentPadding: EdgeInsets.zero,
+        ),
+        onChanged: (_) => _markDirty(),
+      ),
     );
   }
 
@@ -520,8 +594,49 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
 
   void _stopWriting() {
     FocusScope.of(context).unfocus();
-    setState(() => _writing = false);
+    setState(() {
+      // There is no rendered plain text mode to stay in once writing is over.
+      if (_rawMode) _leaveRawMode();
+      _writing = false;
+    });
     unawaited(_saveNow());
+  }
+
+  /// Swaps the block editor for the note's literal Markdown, and back.
+  void _toggleRawMode() {
+    setState(() {
+      if (_rawMode) {
+        _leaveRawMode();
+        return;
+      }
+      _rawController.text = _document.serialize();
+      _rawMode = true;
+      _caret = null;
+      _writing = true;
+    });
+    unawaited(_saveNow());
+  }
+
+  /// Turns what the field holds back into blocks. Only call inside a
+  /// [setState]: this reads and replaces the document the body is built from.
+  ///
+  /// The body being left becomes a restore point, so a round trip the reader
+  /// did not mean to make is one undo away.
+  void _leaveRawMode() {
+    _undo.record(_document.serialize());
+    _document = MarkdownDocument.parse(_rawController.text);
+    _rawMode = false;
+  }
+
+  /// Copies the whole body, the mitigation for the one thing the block editor
+  /// cannot do: a selection never spans two blocks, so there is no way to
+  /// select the note and copy it by hand.
+  Future<void> _copyMarkdown() async {
+    await Clipboard.setData(ClipboardData(text: _currentBody));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Markdown copiado.')),
+    );
   }
 
   /// Saves, queueing behind any write already on its way to disk.
@@ -547,7 +662,7 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
     final ownerId = _ownerId;
     if (ownerId == null) return false;
     final title = _titleController.text.trim();
-    final body = _document.serialize();
+    final body = _currentBody;
     if (_note == null && title.isEmpty && body.trim().isEmpty) {
       setState(() {
         _dirty = false;
