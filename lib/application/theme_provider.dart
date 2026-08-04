@@ -1,24 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Modos de tema disponibles
+import '../domain/portable_preferences.dart';
+import 'session_controller.dart';
+
+/// Modos de tema disponibles.
 enum AppThemeMode {
-  system, // Sigue el tema del sistema
-  light,  // Blanco puro minimalista
-  dark,   // Negro puro minimalista (OLED)
+  system,
+  light,
+  dark,
 }
 
-/// Provider para manejar el tema de la aplicación
-class ThemeProvider with ChangeNotifier {
-  static const String _keyThemeMode = 'app_theme_mode';
-  
-  AppThemeMode _themeMode = AppThemeMode.system;
-  
-  AppThemeMode get themeMode => _themeMode;
-  
-  /// Convierte AppThemeMode a ThemeMode de Flutter
+extension AppThemeModePresentation on AppThemeMode {
   ThemeMode get flutterThemeMode {
-    switch (_themeMode) {
+    switch (this) {
       case AppThemeMode.system:
         return ThemeMode.system;
       case AppThemeMode.light:
@@ -27,53 +25,96 @@ class ThemeProvider with ChangeNotifier {
         return ThemeMode.dark;
     }
   }
-  
-  /// Carga el tema guardado
-  Future<void> loadTheme() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedMode = prefs.getString(_keyThemeMode);
-    
-    if (savedMode != null) {
-      _themeMode = AppThemeMode.values.firstWhere(
-        (mode) => mode.name == savedMode,
-        orElse: () => AppThemeMode.system,
+}
+
+const _themeModePreferenceKey = 'app_theme_mode';
+
+final initialThemeModeProvider = Provider<AppThemeMode>(
+  (ref) => AppThemeMode.system,
+);
+
+typedef PortablePreferencesRepositoryFactory = PortablePreferencesRepository
+    Function(String ownerId);
+
+final portablePreferencesRepositoryFactoryProvider =
+    Provider<PortablePreferencesRepositoryFactory?>((ref) => null);
+
+final themeControllerProvider =
+    NotifierProvider<ThemeController, AppThemeMode>(ThemeController.new);
+
+Future<AppThemeMode> loadSavedThemeMode() async {
+  final preferences = await SharedPreferences.getInstance();
+  final savedMode = preferences.getString(_themeModePreferenceKey);
+
+  return AppThemeMode.values.firstWhere(
+    (mode) => mode.name == savedMode,
+    orElse: () => AppThemeMode.system,
+  );
+}
+
+class ThemeController extends Notifier<AppThemeMode> {
+  int _loadGeneration = 0;
+
+  @override
+  AppThemeMode build() {
+    final initial = ref.watch(initialThemeModeProvider);
+    final ownerId = ref.watch(activeOwnerIdProvider);
+    final factory = ref.watch(portablePreferencesRepositoryFactoryProvider);
+    final generation = ++_loadGeneration;
+    if (ownerId != null && factory != null) {
+      unawaited(
+        Future<void>.microtask(
+          () => _loadOwnerTheme(
+            ownerId,
+            factory,
+            generation: generation,
+          ),
+        ),
       );
-      notifyListeners();
     }
+    return initial;
   }
-  
-  /// Cambia el tema
+
   Future<void> setThemeMode(AppThemeMode mode) async {
-    if (_themeMode == mode) return;
-    
-    _themeMode = mode;
-    notifyListeners();
-    
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyThemeMode, mode.name);
-  }
-  
-  /// Obtiene el label del tema actual
-  String get themeModeLabel {
-    switch (_themeMode) {
-      case AppThemeMode.system:
-        return 'Automático';
-      case AppThemeMode.light:
-        return 'Claro';
-      case AppThemeMode.dark:
-        return 'Oscuro';
+    if (state == mode) return;
+
+    state = mode;
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_themeModePreferenceKey, mode.name);
+    final ownerId = ref.read(activeOwnerIdProvider);
+    final factory = ref.read(portablePreferencesRepositoryFactoryProvider);
+    if (ownerId != null && factory != null) {
+      await factory(ownerId).savePortableThemeMode(mode.name);
     }
   }
-  
-  /// Obtiene el icono del tema actual
-  IconData get themeModeIcon {
-    switch (_themeMode) {
-      case AppThemeMode.system:
-        return Icons.brightness_auto_rounded;
-      case AppThemeMode.light:
-        return Icons.light_mode_rounded;
-      case AppThemeMode.dark:
-        return Icons.dark_mode_rounded;
+
+  Future<void> refreshAfterSync(String ownerId) async {
+    if (ref.read(activeOwnerIdProvider) != ownerId) return;
+    final factory = ref.read(portablePreferencesRepositoryFactoryProvider);
+    if (factory == null) return;
+    await _loadOwnerTheme(
+      ownerId,
+      factory,
+      generation: ++_loadGeneration,
+    );
+  }
+
+  Future<void> _loadOwnerTheme(
+    String ownerId,
+    PortablePreferencesRepositoryFactory factory, {
+    required int generation,
+  }) async {
+    final portable = await factory(ownerId).loadPortablePreferences();
+    if (generation != _loadGeneration ||
+        ref.read(activeOwnerIdProvider) != ownerId ||
+        portable == null) {
+      return;
     }
+    state = AppThemeMode.values.firstWhere(
+      (mode) => mode.name == portable.themeMode,
+      orElse: () => AppThemeMode.system,
+    );
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_themeModePreferenceKey, state.name);
   }
 }
