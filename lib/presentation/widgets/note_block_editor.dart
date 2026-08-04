@@ -205,7 +205,12 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
           controller: _fieldController,
           focusNode: _focusNode,
           style: style,
-          maxLines: 1,
+          // Never one: a `maxLines` of one makes `EditableText` prepend
+          // `singleLineFormatter`, and the first keystroke on a code fence
+          // would then strip every newline and leave an open fence that
+          // swallows the rest of the note. Return is handled below instead.
+          maxLines: null,
+          keyboardType: TextInputType.text,
           textInputAction: TextInputAction.next,
           // `onEditingComplete` rather than `onSubmitted`: the default
           // completion for `next` hands focus to the following widget before
@@ -323,10 +328,18 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   void _split() {
-    if (_activeIndex == null) return;
+    final index = _activeIndex;
+    if (index == null) return;
     final document = _commitField() ?? widget.document;
     final caret = _caret;
-    if (caret == null) return;
+    if (caret == null || caret.blockIndex >= document.blocks.length) return;
+    // A fence spans several source lines, so splitting it would drop its code
+    // and its closing marker. Return adds a line inside it instead, which is
+    // the only way to grow one now that the field is no longer single line.
+    if (document.blocks[caret.blockIndex].type == MarkdownBlockType.codeFence) {
+      _insertLineBreak();
+      return;
+    }
     _applyEdit(document, splitBlock(document, caret));
   }
 
@@ -354,6 +367,19 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
       '$_sentinel$text',
       (offset < 0 ? text.length : offset) + _sentinel.length,
     );
+    _commitField();
+    _publishCaret(_caret);
+  }
+
+  /// Adds a line inside the active block, for the blocks that own more than
+  /// one source line and therefore cannot be split.
+  void _insertLineBreak() {
+    final selection = _fieldController.selection;
+    if (!selection.isValid) return;
+    final text = _fieldController.text;
+    final start = _clamp(selection.start, text.length);
+    final end = _clamp(selection.end, text.length);
+    _setFieldValue(text.replaceRange(start, end, '\n'), start + 1);
     _commitField();
     _publishCaret(_caret);
   }
