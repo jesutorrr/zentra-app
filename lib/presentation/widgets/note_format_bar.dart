@@ -20,6 +20,14 @@ const _commandIcons = <NoteBlockCommand, (IconData, String)>{
   NoteBlockCommand.divider: (Icons.horizontal_rule_rounded, 'Separador'),
 };
 
+/// What the block menu wears when the caret sits on an ordinary paragraph,
+/// the one block type that has no command of its own.
+const (IconData, String) _paragraphGlyph = (Icons.subject_rounded, 'Párrafo');
+
+/// Buttons the bar never collapses: the two inline styles and the two history
+/// actions.
+const int _fixedButtonCount = 4;
+
 /// Formatting bar that only exists while the body has focus and sits above the
 /// software keyboard.
 class NoteFormatBar extends StatelessWidget {
@@ -62,36 +70,13 @@ class NoteFormatBar extends StatelessWidget {
           color: colorScheme.surfaceContainerHigh,
           border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
             children: [
-              for (final entry in _commandIcons.entries)
-                _button(
-                  context,
-                  name: entry.key.name,
-                  icon: entry.value.$1,
-                  label: entry.value.$2,
-                  onPressed: () => onCommand(entry.key),
-                  selected: activeCommand == entry.key,
-                ),
+              Flexible(child: _formatGroup(context, constraints.maxWidth)),
               _separator(context),
-              _button(
-                context,
-                name: 'bold',
-                icon: Icons.format_bold_rounded,
-                label: 'Negritas',
-                onPressed: onBold,
-              ),
-              _button(
-                context,
-                name: 'italic',
-                icon: Icons.format_italic_rounded,
-                label: 'Cursiva',
-                onPressed: onItalic,
-              ),
-              _separator(context),
+              // Undo is the safety net of a block editor, so it lives outside
+              // the part of the bar that is allowed to give way.
               _button(
                 context,
                 name: 'undo',
@@ -110,6 +95,101 @@ class NoteFormatBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// The seven block commands plus the two inline styles.
+  ///
+  /// Too narrow a window collapses the block commands into a single menu
+  /// instead of letting them scroll behind no affordance at all. The scroll
+  /// view stays as the last resort for a window narrower than even that.
+  Widget _formatGroup(BuildContext context, double available) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          if (_commandsFitInline(context, available)) ...[
+            for (final entry in _commandIcons.entries)
+              _button(
+                context,
+                name: entry.key.name,
+                icon: entry.value.$1,
+                label: entry.value.$2,
+                onPressed: () => onCommand(entry.key),
+                selected: activeCommand == entry.key,
+              ),
+          ] else
+            _blockTypeMenu(context),
+          _separator(context),
+          _button(
+            context,
+            name: 'bold',
+            icon: Icons.format_bold_rounded,
+            label: 'Negritas',
+            onPressed: onBold,
+          ),
+          _button(
+            context,
+            name: 'italic',
+            icon: Icons.format_italic_rounded,
+            label: 'Cursiva',
+            onPressed: onItalic,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Whether every block command still has room next to the buttons the bar
+  /// never collapses.
+  ///
+  /// Counted rather than read off a device breakpoint: the bar is as wide as
+  /// the window, every button is the same fixed size, and neither of those
+  /// changes with the reader's text size.
+  bool _commandsFitInline(BuildContext context, double available) {
+    if (!available.isFinite) return true;
+    final buttons = _commandIcons.length + _fixedButtonCount;
+    return available >= buttons * _touchTarget + 2 * context.spacing.xs;
+  }
+
+  /// One control standing in for the seven block commands.
+  ///
+  /// It wears the active block's icon, so the bar still answers "what is this
+  /// block" at a glance the way the inline row does, and says so out loud for
+  /// a screen reader.
+  Widget _blockTypeMenu(BuildContext context) {
+    final active = activeCommand;
+    final (icon, name) =
+        active == null ? _paragraphGlyph : _commandIcons[active]!;
+    return PopupMenuButton<NoteBlockCommand>(
+      key: const ValueKey('note-format-block-menu'),
+      tooltip: 'Tipo de bloque',
+      icon: Icon(icon, semanticLabel: 'Tipo de bloque: $name'),
+      onSelected: onCommand,
+      itemBuilder: (context) => [
+        for (final entry in _commandIcons.entries)
+          PopupMenuItem<NoteBlockCommand>(
+            key: ValueKey('note-format-menu-${entry.key.name}'),
+            value: entry.key,
+            child: Semantics(
+              selected: entry.key == active,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    entry.value.$1,
+                    color: entry.key == active
+                        ? context.zentraPalette.brandTeal
+                        : null,
+                  ),
+                  SizedBox(width: context.spacing.sm),
+                  Flexible(child: Text(entry.value.$2)),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 

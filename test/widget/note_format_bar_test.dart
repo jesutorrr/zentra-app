@@ -55,6 +55,31 @@ void main() {
     return controller;
   }
 
+  /// Hands the bar a window of exactly [width], which is what decides whether
+  /// the block commands stay side by side or collapse into their menu.
+  Widget hostBar(double width, NoteFormatBar bar) => MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(width: width, child: bar),
+          ),
+        ),
+      );
+
+  NoteFormatBar wiredBar({
+    NoteBlockCommand? activeCommand,
+    ValueChanged<NoteBlockCommand>? onCommand,
+  }) =>
+      NoteFormatBar(
+        visible: true,
+        activeCommand: activeCommand,
+        onCommand: onCommand ?? (_) {},
+        onBold: () {},
+        onItalic: () {},
+        onUndo: () {},
+        onRedo: () {},
+      );
+
   testWidgets('the bar is hidden until the body has focus', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -153,6 +178,108 @@ void main() {
     expect(
       tester.getSemantics(find.byKey(const ValueKey('note-format-bold'))),
       isSemantics(label: 'Negritas', isButton: true),
+    );
+    handle.dispose();
+  });
+
+  // Undo is the only way back from a block command that did the wrong thing,
+  // so it is the one control the bar may never push past its own edge.
+  testWidgets('a phone bar keeps undo and redo inside its own bounds', (
+    tester,
+  ) async {
+    await tester.pumpWidget(hostBar(390, wiredBar()));
+
+    final bounds =
+        tester.getRect(find.byKey(const ValueKey('note-format-bar')));
+    for (final name in const ['undo', 'redo']) {
+      final rect = tester.getRect(find.byKey(ValueKey('note-format-$name')));
+      expect(rect.left, greaterThanOrEqualTo(bounds.left));
+      expect(rect.right, lessThanOrEqualTo(bounds.right));
+      expect(rect.width, greaterThanOrEqualTo(44));
+      expect(rect.height, greaterThanOrEqualTo(44));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a phone bar collapses the block commands into one menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(hostBar(390, wiredBar()));
+
+    expect(
+      find.byKey(const ValueKey('note-format-block-menu')),
+      findsOneWidget,
+    );
+    for (final command in NoteBlockCommand.values) {
+      expect(
+        find.byKey(ValueKey('note-format-${command.name}')),
+        findsNothing,
+        reason: '${command.name} should live in the menu on a phone',
+      );
+    }
+    // The two inline styles are cheap enough to stay out in the open.
+    expect(find.byKey(const ValueKey('note-format-bold')), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-format-italic')), findsOneWidget);
+  });
+
+  testWidgets('a tablet bar keeps every block command side by side', (
+    tester,
+  ) async {
+    await tester.pumpWidget(hostBar(744, wiredBar()));
+
+    expect(find.byKey(const ValueKey('note-format-block-menu')), findsNothing);
+    for (final command in NoteBlockCommand.values) {
+      expect(
+        find.byKey(ValueKey('note-format-${command.name}')),
+        findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('the collapsed menu still reaches every block command', (
+    tester,
+  ) async {
+    final pressed = <NoteBlockCommand>[];
+    await tester.pumpWidget(hostBar(390, wiredBar(onCommand: pressed.add)));
+
+    await tester.tap(find.byKey(const ValueKey('note-format-block-menu')));
+    await tester.pumpAndSettle();
+
+    for (final command in NoteBlockCommand.values) {
+      expect(
+        find.byKey(ValueKey('note-format-menu-${command.name}')),
+        findsOneWidget,
+      );
+    }
+
+    final divider = find.byKey(const ValueKey('note-format-menu-divider'));
+    await tester.ensureVisible(divider);
+    await tester.pumpAndSettle();
+    await tester.tap(divider);
+    await tester.pumpAndSettle();
+
+    expect(pressed, [NoteBlockCommand.divider]);
+  });
+
+  testWidgets('the collapsed bar keeps its targets and Spanish labels', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      hostBar(390, wiredBar(activeCommand: NoteBlockCommand.checklist)),
+    );
+
+    await expectLater(tester, meetsGuideline(iOSTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+    // The menu wears the active block, so the bar still answers what the
+    // block is without the reader opening anything.
+    final menu = find.bySemanticsLabel('Tipo de bloque: Casilla');
+    expect(menu, findsOneWidget);
+    expect(tester.getSemantics(menu), isSemantics(isButton: true));
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('note-format-undo'))),
+      isSemantics(label: 'Deshacer', isButton: true),
     );
     handle.dispose();
   });
