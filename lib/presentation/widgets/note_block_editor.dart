@@ -48,12 +48,20 @@ class NoteBlockEditor extends StatefulWidget {
   final NoteBlockEditorController? controller;
   final bool readOnly;
 
+  /// Document level undo and redo, which take over from the text field's own
+  /// history. That history outlives a rebind, so reaching it would restore one
+  /// block's text over another's.
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
+
   const NoteBlockEditor({
     required this.document,
     required this.onChanged,
     required this.onCaretChanged,
     this.controller,
     this.readOnly = false,
+    this.onUndo,
+    this.onRedo,
     super.key,
   });
 
@@ -201,32 +209,52 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
         // focus itself would leave the user with no caret at all.
         canRequestFocus: false,
         onKeyEvent: _onKeyEvent,
-        child: TextField(
-          controller: _fieldController,
-          focusNode: _focusNode,
-          style: style,
-          // Never one: a `maxLines` of one makes `EditableText` prepend
-          // `singleLineFormatter`, and the first keystroke on a code fence
-          // would then strip every newline and leave an open fence that
-          // swallows the rest of the note. Return is handled below instead.
-          maxLines: null,
-          keyboardType: TextInputType.text,
-          textInputAction: TextInputAction.next,
-          // `onEditingComplete` rather than `onSubmitted`: the default
-          // completion for `next` hands focus to the following widget before
-          // the callback runs, which would drop the caret out of the note.
-          onEditingComplete: _split,
-          cursorColor: context.zentraPalette.brandTeal,
-          decoration: InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            filled: false,
-            contentPadding: EdgeInsets.zero,
-            hintText:
-                widget.document.blocks.length == 1 ? 'Escribe aquí…' : null,
-            hintStyle: style.copyWith(color: colorScheme.onSurfaceVariant),
+        child: Actions(
+          // The field keeps a private undo history that survives a rebind, so
+          // one of its entries can hold a different block's text. Undo belongs
+          // to the document, as the design spec requires, and mapping both
+          // intents here means the field's own history is never reachable.
+          actions: <Type, Action<Intent>>{
+            UndoTextIntent: CallbackAction<UndoTextIntent>(
+              onInvoke: (_) {
+                widget.onUndo?.call();
+                return null;
+              },
+            ),
+            RedoTextIntent: CallbackAction<RedoTextIntent>(
+              onInvoke: (_) {
+                widget.onRedo?.call();
+                return null;
+              },
+            ),
+          },
+          child: TextField(
+            controller: _fieldController,
+            focusNode: _focusNode,
+            style: style,
+            // Never one: a `maxLines` of one makes `EditableText` prepend
+            // `singleLineFormatter`, and the first keystroke on a code fence
+            // would then strip every newline and leave an open fence that
+            // swallows the rest of the note. Return is handled below instead.
+            maxLines: null,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.next,
+            // `onEditingComplete` rather than `onSubmitted`: the default
+            // completion for `next` hands focus to the following widget before
+            // the callback runs, which would drop the caret out of the note.
+            onEditingComplete: _split,
+            cursorColor: context.zentraPalette.brandTeal,
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
+              contentPadding: EdgeInsets.zero,
+              hintText:
+                  widget.document.blocks.length == 1 ? 'Escribe aquí…' : null,
+              hintStyle: style.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
           ),
         ),
       ),

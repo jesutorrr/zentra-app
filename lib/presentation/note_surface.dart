@@ -321,6 +321,10 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
             controller: _editorController,
             onChanged: _onDocumentChanged,
             onCaretChanged: _onCaretChanged,
+            // The field's own history would restore one block's text over
+            // another's, so the keyboard's undo reaches this one instead.
+            onUndo: _performUndo,
+            onRedo: _performRedo,
           ),
           if (_showsChecklistComplete) _buildChecklistDone(context),
         ],
