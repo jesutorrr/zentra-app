@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/note_controller.dart';
 import '../application/note_state.dart';
 import '../application/session_controller.dart';
+import '../domain/markdown_document.dart';
 import '../domain/note_models.dart';
 import 'design_tokens.dart';
 import 'note_reminder_screen.dart';
@@ -315,10 +316,19 @@ class _NotesScreenState extends ConsumerState<NotesScreen> {
     required bool opensEditor,
   }) {
     final reminder = state.getReminder(note.id);
+    final document = MarkdownDocument.parse(note.body);
+    final query = _query.trim();
     return NoteLibraryCard(
       key: ValueKey('note-card-${note.id}'),
       title: note.title,
-      body: note.body,
+      // Markers never reach the card: without a search the note opens with its
+      // first readable line, and with one it opens where the match is.
+      body: query.isEmpty
+          ? document.previewText()
+          : markdownExcerptAround(note.body, query),
+      checkedCount: document.checkedCount,
+      checkItemCount: document.checkItemCount,
+      highlightQuery: query.isEmpty ? null : query,
       tag: note.tags.isEmpty ? note.category : note.tags.first,
       updatedLabel: _updatedLabel(note.updatedAt),
       reminderLabel: _reminderLabel(reminder),

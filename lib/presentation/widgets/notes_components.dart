@@ -175,10 +175,18 @@ class NotesCaptureCard extends StatelessWidget {
 
 class NoteLibraryCard extends StatelessWidget {
   final String title;
+
+  /// Already readable preview text, never raw Markdown: the caller strips the
+  /// markers so the card never has to guess which characters are syntax.
   final String body;
   final String? tag;
   final String updatedLabel;
   final String? reminderLabel;
+  final int checkedCount;
+  final int checkItemCount;
+
+  /// Search term to emphasize inside [body], when the card is showing a result.
+  final String? highlightQuery;
   final bool isPinned;
   final bool isArchived;
   final bool isSelected;
@@ -195,6 +203,9 @@ class NoteLibraryCard extends StatelessWidget {
     required this.onTap,
     this.tag,
     this.reminderLabel,
+    this.checkedCount = 0,
+    this.checkItemCount = 0,
+    this.highlightQuery,
     this.isPinned = false,
     this.isArchived = false,
     this.isSelected = false,
@@ -202,6 +213,15 @@ class NoteLibraryCard extends StatelessWidget {
     this.onToggleArchive,
     super.key,
   });
+
+  String get _progressLabel => '$checkedCount de $checkItemCount';
+
+  /// Clamped so a caller that passes counts from two different reads cannot
+  /// paint a bar longer than its own track.
+  double get _progressValue {
+    if (checkItemCount <= 0) return 0;
+    return (checkedCount / checkItemCount).clamp(0, 1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,6 +239,8 @@ class NoteLibraryCard extends StatelessWidget {
       selected: isSelected,
       label: [
         title,
+        // The bar alone carries no meaning for a reader who cannot see it.
+        if (checkItemCount > 0) '$_progressLabel completadas',
         if (isPinned) 'fijada',
         if (isArchived) 'archivada',
         if (reminderLabel != null) reminderLabel!,
@@ -287,16 +309,23 @@ class NoteLibraryCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         SizedBox(height: context.spacing.xs),
-                        Text(
-                          body.trim().isEmpty
-                              ? 'Todavía no hay contenido.'
-                              : body,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                        Text.rich(
+                          TextSpan(
+                            children: _highlightSpans(
+                              context,
+                              body.trim().isEmpty
+                                  ? 'Todavía no hay contenido.'
+                                  : body,
+                            ),
                           ),
+                          key: const ValueKey('note-card-preview'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        if (checkItemCount > 0) ...[
+                          SizedBox(height: context.spacing.xs),
+                          _buildProgress(context, theme),
+                        ],
                         SizedBox(height: context.spacing.sm),
                         Text(
                           updatedLabel,
@@ -320,6 +349,82 @@ class NoteLibraryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// The checklist track plus its count, always paired: the bar is colour
+  /// only, so the count is what a reader who cannot see it gets.
+  Widget _buildProgress(BuildContext context, ThemeData theme) {
+    const progress = ValueKey('note-card-progress');
+    final label = Text(
+      _progressLabel,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+    final track = ClipRRect(
+      borderRadius: BorderRadius.circular(context.radii.pill),
+      child: LinearProgressIndicator(
+        minHeight: 4,
+        value: _progressValue,
+        backgroundColor: context.zentraPalette.progressTrack,
+        valueColor: AlwaysStoppedAnimation<Color>(accent),
+      ),
+    );
+    // Side by side the count stops fitting long before the largest text
+    // sizes, and squeezing the track to zero would leave the bar meaningless.
+    if (MediaQuery.textScalerOf(context).scale(16) > 23) {
+      return Column(
+        key: progress,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          track,
+          SizedBox(height: context.spacing.xxs),
+          label,
+        ],
+      );
+    }
+    return Row(
+      key: progress,
+      children: [
+        Expanded(child: track),
+        SizedBox(width: context.spacing.xs),
+        label,
+      ],
+    );
+  }
+
+  /// Splits [value] so the searched term reads as the reason this card is on
+  /// screen.
+  ///
+  /// Matching is done with [String.indexOf] rather than a pattern, so a query
+  /// full of regular expression characters is treated as the literal text the
+  /// reader typed.
+  List<TextSpan> _highlightSpans(BuildContext context, String value) {
+    final theme = Theme.of(context);
+    final base = (theme.textTheme.bodyMedium ?? const TextStyle()).copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final query = highlightQuery?.trim() ?? '';
+    if (query.isEmpty) return [TextSpan(text: value, style: base)];
+    // Case folding can change a string's length, so the offset it yields is
+    // clamped before it indexes back into the original text.
+    final at = value.toLowerCase().indexOf(query.toLowerCase());
+    if (at < 0 || at >= value.length) {
+      return [TextSpan(text: value, style: base)];
+    }
+    final end =
+        at + query.length > value.length ? value.length : at + query.length;
+    return [
+      if (at > 0) TextSpan(text: value.substring(0, at), style: base),
+      TextSpan(
+        text: value.substring(at, end),
+        style: base.copyWith(
+          fontWeight: FontWeight.w700,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      if (end < value.length) TextSpan(text: value.substring(end), style: base),
+    ];
   }
 }
 
