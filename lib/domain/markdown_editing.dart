@@ -161,11 +161,15 @@ DocumentEdit changeIndent(
 /// this looks right in memory and comes back different after a save: the
 /// classic case is a line of prose with three backticks becoming an unclosed
 /// code fence that swallows every block below it on reload.
-bool _survivesReparse(MarkdownDocument next) {
-  final reparsed = MarkdownDocument.parse(next.serialize());
-  if (reparsed.blocks.length != next.blocks.length) return false;
-  for (var i = 0; i < next.blocks.length; i++) {
-    if (reparsed.blocks[i] != next.blocks[i]) return false;
+bool _survivesReparse(MarkdownDocument next) =>
+    _sameBlocks(MarkdownDocument.parse(next.serialize()), next);
+
+/// True when [a] and [b] hold exactly the same blocks in the same order.
+bool _sameBlocks(MarkdownDocument a, MarkdownDocument b) {
+  if (identical(a, b)) return true;
+  if (a.blocks.length != b.blocks.length) return false;
+  for (var i = 0; i < a.blocks.length; i++) {
+    if (a.blocks[i] != b.blocks[i]) return false;
   }
   return true;
 }
@@ -219,8 +223,10 @@ DocumentEdit applyBlockCommand(
 
   if (command == NoteBlockCommand.code) {
     final toggled = _toggleFence(block);
-    if (toggled == null) return _unchanged(document, caret, block);
-    final next = document.replaceBlock(caret.blockIndex, toggled);
+    var next = document.replaceBlock(caret.blockIndex, toggled.first);
+    for (var i = 1; i < toggled.length; i++) {
+      next = next.insertBlock(caret.blockIndex + i, toggled[i]);
+    }
     if (!_survivesReparse(next)) return _unchanged(document, caret, block);
     return DocumentEdit(
       next,
@@ -272,6 +278,28 @@ DocumentEdit applyBlockCommand(
   );
 }
 
+/// Whether [command] would change anything at [caret].
+///
+/// Several of the refusals above exist to protect text that no command could
+/// put back, which leaves the toolbar drawing buttons that do nothing when
+/// tapped. This is what it asks before it draws one.
+///
+/// Answered by running the transformation and comparing rather than by
+/// restating the conditions, so it cannot fall out of step with what the
+/// button would actually do. That costs a whole transformation, including the
+/// reparse of the serialized document each one ends with, so a caller asking
+/// for every command on every build should cache the answers against the
+/// document and the block they were computed for.
+bool canApplyBlockCommand(
+  MarkdownDocument document,
+  DocumentCaret caret,
+  NoteBlockCommand command,
+) =>
+    !_sameBlocks(
+      applyBlockCommand(document, caret, command).document,
+      document,
+    );
+
 /// The document as it was, with the caret pinned inside [block]. Every path
 /// that acts clamps the caret, so the ones that refuse do too rather than
 /// handing back an offset that points past the end of the line.
@@ -292,36 +320,44 @@ DocumentEdit _unchanged(
 bool _isEmptyParagraph(MarkdownBlock block) =>
     block.type == MarkdownBlockType.paragraph && block.toSourceLine().isEmpty;
 
-/// Wraps [block] in a fence, or unwraps the one it already is. Null when the
-/// fence cannot be unwrapped without losing source.
+/// The blocks [block] becomes under the code command: a fence when it is
+/// anything else, and the lines the fence held when it already is one.
 ///
-/// The fence is always closed: an open one would swallow every block below it
-/// the next time the note is parsed. Only a fence shaped like the one this
-/// command produces is unwrapped, because that is the only shape where
-/// toggling back returns the block the user started from: folding several code
-/// lines into one would delete the newlines between them, and dropping the
-/// language would delete the word typed right after the marker. Neither comes
-/// back, so a fence the user wrote by hand is left alone instead.
-MarkdownBlock? _toggleFence(MarkdownBlock block) {
-  if (block.type == MarkdownBlockType.codeFence) {
-    if (block.codeLines.length != 1 || block.language.isNotEmpty) return null;
-    // Parsed rather than assumed to be a paragraph so the resulting block
-    // still describes the line it serializes.
-    final unwrapped =
-        MarkdownDocument.parse(block.codeLines.single).blocks.first;
-    // A fenced line that is itself a run of backticks would come out of a
-    // closed fence as an open one.
-    if (unwrapped.type == MarkdownBlockType.codeFence) return null;
-    return unwrapped;
+/// The fence it writes is always closed: an open one would swallow every block
+/// below it the next time the note is parsed.
+///
+/// Unwrapping keeps every character the fence was holding. Each code line
+/// becomes a block of its own, so the newlines between them survive as block
+/// boundaries instead of being folded away, and the language rides back out as
+/// the first line, because it is text the user typed and no other part of the
+/// result would carry it. Only the marker and its closing line are dropped,
+/// which is exactly what the user asked for. The caller still checks the
+/// result against a reparse: a code line that is itself a longer run of
+/// backticks would come out of a closed fence as an open one.
+List<MarkdownBlock> _toggleFence(MarkdownBlock block) {
+  if (block.type != MarkdownBlockType.codeFence) {
+    return [
+      MarkdownBlock(
+        type: MarkdownBlockType.codeFence,
+        prefix: '```',
+        // The whole source line, marker included, so toggling back returns
+        // the block the user started from.
+        codeLines: List.unmodifiable([block.toSourceLine()]),
+        fenceClose: '```',
+      ),
+    ];
   }
-  return MarkdownBlock(
-    type: MarkdownBlockType.codeFence,
-    prefix: '```',
-    // The whole source line, marker included, so toggling back returns the
-    // block the user started from.
-    codeLines: List.unmodifiable([block.toSourceLine()]),
-    fenceClose: '```',
-  );
+  final lines = <String>[
+    if (block.language.isNotEmpty) block.language,
+    ...block.codeLines,
+  ];
+  // An empty fence has nothing to hand back but the line it occupied.
+  if (lines.isEmpty) return const [MarkdownBlock.paragraph()];
+  // Parsed rather than assumed to be paragraphs so each resulting block still
+  // describes the line it serializes.
+  return [
+    for (final line in lines) MarkdownDocument.parse(line).blocks.first,
+  ];
 }
 
 String _nextPrefixFor(MarkdownBlock block, NoteBlockCommand command) {
@@ -486,6 +522,21 @@ DocumentEdit wrapSelection(
     DocumentCaret(blockIndex: blockIndex, offset: caretEnd),
   );
 }
+
+/// Whether wrapping `[start, end)` of [blockIndex] in [style] would change
+/// anything. The inline half of [canApplyBlockCommand], with the same reasons
+/// and the same cost.
+bool canWrapSelection(
+  MarkdownDocument document,
+  int blockIndex,
+  int start,
+  int end,
+  MarkdownInlineStyle style,
+) =>
+    !_sameBlocks(
+      wrapSelection(document, blockIndex, start, end, style).document,
+      document,
+    );
 
 /// True when [text] ends with [marker] and that marker is not the tail of a
 /// longer run of the same character.

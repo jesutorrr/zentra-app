@@ -185,22 +185,71 @@ void main() {
     expect(plain.document.blocks.first, document.blocks.first);
   });
 
-  test('the code command refuses to unwrap a fence it did not write', () {
-    // Folding the code lines into one would delete the newlines and the
-    // language, and no command puts either back.
-    const sources = <String>[
-      '```dart\nlinea uno\nlinea dos\n```',
-      '```dart\ncodigo\n```',
-      '```\nuno\ndos\n```',
-    ];
-    for (final source in sources) {
+  test('the code command unwraps a fence the user wrote by hand', () {
+    // One block per code line, so the newlines survive as block boundaries,
+    // and the language first, because it is text the user typed and nothing
+    // else in the result would carry it.
+    const cases = <String, String>{
+      '```dart\nlinea uno\nlinea dos\n```': 'dart\nlinea uno\nlinea dos',
+      '```dart\ncodigo\n```': 'dart\ncodigo',
+      '```\nuno\ndos\n```': 'uno\ndos',
+      // An unclosed fence reads everything under it as code, so unwrapping is
+      // the only way those lines come back.
+      '``` suelto\nsegunda': ' suelto\nsegunda',
+      '```\n```': '',
+    };
+    cases.forEach((source, expected) {
       final edit = applyBlockCommand(
         MarkdownDocument.parse(source),
         _caret,
         NoteBlockCommand.code,
       );
-      expect(edit.document.serialize(), source, reason: source);
+      expect(edit.document.serialize(), expected, reason: source);
+      expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 0));
+      expect(reparsesToItself(edit.document), isTrue, reason: source);
+    });
+  });
+
+  test('unwrapping a fence keeps every line it was holding', () {
+    final failures = <String>[];
+    for (final line in _corpus) {
+      final fence = MarkdownDocument.parse(line).blocks.first;
+      if (fence.type != MarkdownBlockType.codeFence) continue;
+      final unwrapped = applyBlockCommand(
+        MarkdownDocument.parse(line),
+        _caret,
+        NoteBlockCommand.code,
+      ).document.serialize();
+      for (final held in [
+        if (fence.language.isNotEmpty) fence.language,
+        ...fence.codeLines,
+      ]) {
+        if (held.isNotEmpty && !unwrapped.contains(held)) {
+          failures.add('"$line" dropped "$held"');
+        }
+      }
     }
+    expect(failures, isEmpty);
+  });
+
+  test('the code command still refuses a fence around a longer run', () {
+    // Handing back a line of four backticks would open a fence that reads
+    // every block under it as code, and nothing here puts those blocks back.
+    const source = '```\n````\n```\nsegunda';
+    final edit = applyBlockCommand(
+      MarkdownDocument.parse(source),
+      _caret,
+      NoteBlockCommand.code,
+    );
+    expect(edit.document.serialize(), source);
+    expect(
+      canApplyBlockCommand(
+        MarkdownDocument.parse(source),
+        _caret,
+        NoteBlockCommand.code,
+      ),
+      isFalse,
+    );
   });
 
   test('the code command fences an unsupported line verbatim', () {
@@ -780,5 +829,99 @@ void main() {
       activeCommandFor(MarkdownDocument.parse('---').blocks.first),
       isNull,
     );
+  });
+
+  // The predicates are what the toolbar asks before it draws a button, so a
+  // disagreement between them and the commands is a button that lies.
+  test('the predicate agrees with every command over the whole corpus', () {
+    final failures = <String>[];
+    for (final line in _corpus) {
+      final document = MarkdownDocument.parse('$line\nsegunda\ntercera');
+      final length = document.blocks.first.toSourceLine().length;
+      for (final command in NoteBlockCommand.values) {
+        for (final offset in <int>{0, length ~/ 2, length}) {
+          final caret = DocumentCaret(blockIndex: 0, offset: offset);
+          final acted = applyBlockCommand(document, caret, command)
+                  .document
+                  .serialize() !=
+              document.serialize();
+          if (canApplyBlockCommand(document, caret, command) != acted) {
+            failures.add('$command on "$line" at $offset');
+          }
+        }
+      }
+      for (final style in MarkdownInlineStyle.values) {
+        for (var start = 0; start <= length; start++) {
+          for (var end = start; end <= length; end++) {
+            final acted = wrapSelection(document, 0, start, end, style)
+                    .document
+                    .serialize() !=
+                document.serialize();
+            if (canWrapSelection(document, 0, start, end, style) != acted) {
+              failures.add('$style over "$line" $start..$end');
+            }
+          }
+        }
+      }
+    }
+    expect(failures, isEmpty);
+  });
+
+  test('the predicate refuses what the block cannot answer', () {
+    // A hand written fence with a language now unwraps, which is the whole
+    // point of the button being live on it.
+    final fence = MarkdownDocument.parse('```dart\ncodigo\n```');
+    expect(
+      canApplyBlockCommand(fence, _caret, NoteBlockCommand.code),
+      isTrue,
+    );
+    // Every other block command still refuses a fence, and says so.
+    for (final command in const [
+      NoteBlockCommand.heading,
+      NoteBlockCommand.bullet,
+      NoteBlockCommand.numbered,
+      NoteBlockCommand.checklist,
+      NoteBlockCommand.quote,
+    ]) {
+      expect(
+        canApplyBlockCommand(fence, _caret, command),
+        isFalse,
+        reason: '$command',
+      );
+    }
+    // A rule is inserted below, so it is available even there.
+    expect(
+      canApplyBlockCommand(fence, _caret, NoteBlockCommand.divider),
+      isTrue,
+    );
+    // An unsupported line is kept verbatim, so only the fence accepts it.
+    final raw = MarkdownDocument.parse('| tabla |');
+    expect(canApplyBlockCommand(raw, _caret, NoteBlockCommand.code), isTrue);
+    expect(
+      canApplyBlockCommand(raw, _caret, NoteBlockCommand.heading),
+      isFalse,
+    );
+  });
+
+  test('the inline predicate refuses what a wrap cannot reach', () {
+    final fence = MarkdownDocument.parse('```\ncodigo\n```');
+    expect(
+      canWrapSelection(fence, 0, 4, 10, MarkdownInlineStyle.bold),
+      isFalse,
+    );
+    final raw = MarkdownDocument.parse('| tabla |');
+    expect(canWrapSelection(raw, 0, 2, 7, MarkdownInlineStyle.bold), isFalse);
+    // A collapsed selection has nothing to wrap, and a link needs a target
+    // rather than a pair of markers.
+    final plain = MarkdownDocument.parse('hola mundo');
+    expect(
+      canWrapSelection(plain, 0, 2, 2, MarkdownInlineStyle.bold),
+      isFalse,
+    );
+    expect(
+      canWrapSelection(plain, 0, 0, 4, MarkdownInlineStyle.link),
+      isFalse,
+    );
+    expect(canWrapSelection(plain, 0, 0, 4, MarkdownInlineStyle.bold), isTrue);
   });
 }
