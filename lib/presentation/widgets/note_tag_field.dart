@@ -135,6 +135,14 @@ class _NoteTagFieldState extends State<NoteTagField> {
                   InputChip(
                     key: ValueKey('note-tag-chip-$tag'),
                     label: Text(tag),
+                    // Same outline the accent chips wear a few rows down.
+                    // Without it a tag reads as loose text next to a cross
+                    // rather than as one thing you can remove.
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
                     deleteIcon: Icon(
                       Icons.close_rounded,
                       key: ValueKey('note-tag-remove-$tag'),
