@@ -25,9 +25,11 @@ class NoteBlockEditorController extends ChangeNotifier {
   /// block is being edited.
   DocumentCaret? get caret => _state?._caret;
 
-  /// The raw field selection. Its offsets sit one character ahead of the block
-  /// source because of the sentinel, which callers compensate for.
-  TextSelection? get selection => _state?._fieldController.selection;
+  /// The selection, with both endpoints measured on the block's source line.
+  ///
+  /// Callers never see the sentinel: an offset here indexes the same character
+  /// as the matching offset of [MarkdownBlock.toSourceLine].
+  TextSelection? get sourceSelection => _state?._sourceSelection;
 
   /// Moves the caret to [index]. Applied after the current frame, because a
   /// caller usually hands a new document to the parent in the same turn and
@@ -103,6 +105,17 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     );
   }
 
+  TextSelection get _sourceSelection {
+    final selection = _fieldController.selection;
+    // An invalid selection is handed back untouched: mapping it would turn
+    // "there is no selection" into a collapsed one at the start of the block.
+    if (!selection.isValid) return selection;
+    return TextSelection(
+      baseOffset: _sourceOffset(selection.baseOffset),
+      extentOffset: _sourceOffset(selection.extentOffset),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -132,7 +145,12 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     // would undo whatever arrived between the edit and this rebuild.
     if (identical(widget.document, _boundDocument)) return;
     _boundDocument = widget.document;
-    if (widget.document.blocks[index].toSourceLine() == _fieldSource()) return;
+    final source = widget.document.blocks[index].toSourceLine();
+    if (source == _fieldSource()) return;
+    // A difference confined to the composing region is the IME's own buffer
+    // coming back around. Rebinding there cancels the composition, and every
+    // IME answers that by re-committing what it had, duplicating characters.
+    if (_differsOnlyWhileComposing('$_sentinel$source')) return;
     _bindTo(
       widget.document,
       index,
@@ -270,15 +288,17 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     if (event.logicalKey == LogicalKeyboardKey.tab) {
       final document = _commitField() ?? widget.document;
       final caret = _caret;
-      if (caret == null) return KeyEventResult.handled;
-      _applyEdit(
+      // Indentation only means something on a list item. Swallowing Tab
+      // anywhere else traps focus in the body, which on a keyboard is the
+      // whole note: there is nothing else left to reach.
+      if (caret == null) return KeyEventResult.ignored;
+      final edit = changeIndent(
         document,
-        changeIndent(
-          document,
-          caret,
-          increase: !HardwareKeyboard.instance.isShiftPressed,
-        ),
+        caret,
+        increase: !HardwareKeyboard.instance.isShiftPressed,
       );
+      if (identical(edit.document, document)) return KeyEventResult.ignored;
+      _applyEdit(document, edit);
       return KeyEventResult.handled;
     }
 
@@ -375,7 +395,11 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     if (_activeIndex == 0) {
       // Nothing above to join. Re-arm the sentinel so the next Backspace is
       // still visible to us, and leave the text exactly where it was.
-      _rearm(_fieldController.text);
+      //
+      // The source, not the raw field text: on the hardware key path the
+      // sentinel is still there, and prepending a second one would put the
+      // published selection a character ahead of the block it describes.
+      _rearm(_fieldSource());
       return;
     }
     final document = _commitField() ?? widget.document;
@@ -387,13 +411,16 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     );
   }
 
-  /// Restores the sentinel in front of [text] without moving the caret off the
-  /// character it was on.
-  void _rearm(String text) {
-    final offset = _fieldController.selection.baseOffset;
+  /// Restores the sentinel in front of [source] without moving the caret off
+  /// the character it was on. [source] is measured without the sentinel.
+  void _rearm(String source) {
+    final selection = _fieldController.selection;
+    final offset = selection.baseOffset < 0
+        ? source.length
+        : _sourceOffset(selection.baseOffset);
     _setFieldValue(
-      '$_sentinel$text',
-      (offset < 0 ? text.length : offset) + _sentinel.length,
+      '$_sentinel$source',
+      _sentinel.length + _clamp(offset, source.length),
     );
     _commitField();
     _publishCaret(_caret);
@@ -482,19 +509,30 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
     if (document.blocks.isEmpty) return;
     final target = _clamp(index, document.blocks.length - 1);
     final source = document.blocks[target].toSourceLine();
+    final text = '$_sentinel$source';
+    // Staying on the same block is the only case where an open composition
+    // still describes the characters it was opened over.
+    final composing =
+        target == _activeIndex ? _carriedComposing(text) : TextRange.empty;
     _boundDocument = document;
     setState(() => _activeIndex = target);
     _setFieldValue(
-      '$_sentinel$source',
+      text,
       _sentinel.length + _clamp(offset, source.length),
+      composing: composing,
     );
   }
 
-  void _setFieldValue(String text, int offset) {
+  void _setFieldValue(
+    String text,
+    int offset, {
+    TextRange composing = TextRange.empty,
+  }) {
     _applyingRemoteChange = true;
     _fieldController.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: _clamp(offset, text.length)),
+      composing: composing,
     );
     _applyingRemoteChange = false;
     _lastFieldText = text;
@@ -503,6 +541,37 @@ class _NoteBlockEditorState extends State<NoteBlockEditor> {
   void _publishCaret(DocumentCaret? caret) {
     widget.onCaretChanged(caret);
     widget.controller?._caretMoved();
+  }
+
+  /// The open composing range, kept only when [next] leaves every character in
+  /// front of it untouched. Anywhere else the range would cover letters the
+  /// IME never saw.
+  TextRange _carriedComposing(String next) {
+    final composing = _fieldController.value.composing;
+    final text = _fieldController.text;
+    if (!composing.isValid || !composing.isNormalized) return TextRange.empty;
+    if (composing.end > text.length || composing.end > next.length) {
+      return TextRange.empty;
+    }
+    if (text.substring(0, composing.start) !=
+        next.substring(0, composing.start)) {
+      return TextRange.empty;
+    }
+    return composing;
+  }
+
+  /// Whether [incoming] and the field agree on everything outside the range
+  /// the IME is currently composing over.
+  bool _differsOnlyWhileComposing(String incoming) {
+    final composing = _fieldController.value.composing;
+    final text = _fieldController.text;
+    if (!composing.isValid || !composing.isNormalized) return false;
+    if (composing.end > text.length) return false;
+    final head = text.substring(0, composing.start);
+    final tail = text.substring(composing.end);
+    return incoming.length >= head.length + tail.length &&
+        incoming.startsWith(head) &&
+        incoming.endsWith(tail);
   }
 
   /// The field's text as the document should store it.

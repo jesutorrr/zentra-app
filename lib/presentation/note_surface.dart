@@ -42,10 +42,6 @@ const double _detailsSheetWidth = 560;
 /// the details go back to the bottom sheet, where they get the full width.
 const double _sideColumnTextCeiling = 23;
 
-/// The editor's field carries one zero width sentinel in front of the block
-/// source, so a field selection sits exactly one character ahead of it.
-const int _sentinelLength = 1;
-
 /// The single line a finished checklist gets. It acknowledges the work instead
 /// of rewarding it: no XP, no achievement, no sound and no animation.
 const String _checklistDoneMessage = 'Terminaste todo lo de esta nota.';
@@ -621,13 +617,13 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
 
   void _wrap(MarkdownInlineStyle style) {
     final caret = _caret;
-    final selection = _editorController.selection;
+    final selection = _editorController.sourceSelection;
     if (caret == null || selection == null || selection.isCollapsed) return;
     final edit = wrapSelection(
       _document,
       caret.blockIndex,
-      selection.start - _sentinelLength,
-      selection.end - _sentinelLength,
+      selection.start,
+      selection.end,
       style,
     );
     _onDocumentChanged(edit.document);
