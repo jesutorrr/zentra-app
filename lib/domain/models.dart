@@ -124,7 +124,8 @@ class Habit {
   final DateTime createdAt;
   final bool isArchived;
   final bool isOneTime; // Tarea única - desaparece al completarse
-  final DateTime? scheduledDate; // Fecha específica para tareas únicas en calendario
+  final DateTime?
+      scheduledDate; // Fecha específica para tareas únicas en calendario
   final bool hasReminder; // Si tiene recordatorio activo
   final int? reminderHour; // Hora del recordatorio (0-23)
   final int? reminderMinute; // Minuto del recordatorio (0-59)
@@ -148,14 +149,14 @@ class Habit {
   /// For one-time tasks with scheduledDate, only returns true on that exact date
   bool isScheduledFor(DateTime date) {
     if (isArchived) return false;
-    
+
     // Tareas únicas con fecha específica: solo aparecen ese día
     if (isOneTime && scheduledDate != null) {
       return scheduledDate!.year == date.year &&
           scheduledDate!.month == date.month &&
           scheduledDate!.day == date.day;
     }
-    
+
     return frequency.appliesTo(date);
   }
 
@@ -206,6 +207,7 @@ class Habit {
     bool? hasReminder,
     int? reminderHour,
     int? reminderMinute,
+    bool clearReminderTime = false,
   }) {
     return Habit(
       id: id ?? this.id,
@@ -215,10 +217,13 @@ class Habit {
       createdAt: createdAt ?? this.createdAt,
       isArchived: isArchived ?? this.isArchived,
       isOneTime: isOneTime ?? this.isOneTime,
-      scheduledDate: clearScheduledDate ? null : (scheduledDate ?? this.scheduledDate),
+      scheduledDate:
+          clearScheduledDate ? null : (scheduledDate ?? this.scheduledDate),
       hasReminder: hasReminder ?? this.hasReminder,
-      reminderHour: reminderHour ?? this.reminderHour,
-      reminderMinute: reminderMinute ?? this.reminderMinute,
+      reminderHour:
+          clearReminderTime ? null : (reminderHour ?? this.reminderHour),
+      reminderMinute:
+          clearReminderTime ? null : (reminderMinute ?? this.reminderMinute),
     );
   }
 }
@@ -294,7 +299,8 @@ class CompletedTask {
   final String title;
   final Category category;
   final DateTime completedAt;
-  final bool wasOneTime; // true = tarea única completada, false = recurrente eliminada
+  final bool
+      wasOneTime; // true = tarea única completada, false = recurrente eliminada
 
   const CompletedTask({
     required this.id,

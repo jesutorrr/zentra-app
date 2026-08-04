@@ -7,6 +7,7 @@ class PomodoroActivity {
   final int cyclesCompleted; // How many pomodoro cycles (max 4)
   final int totalMinutes; // Total focus time in minutes
   final bool isCompleted;
+  final String? noteId;
 
   PomodoroActivity({
     required this.id,
@@ -16,6 +17,7 @@ class PomodoroActivity {
     this.cyclesCompleted = 0,
     this.totalMinutes = 0,
     this.isCompleted = false,
+    this.noteId,
   });
 
   PomodoroActivity copyWith({
@@ -26,6 +28,7 @@ class PomodoroActivity {
     int? cyclesCompleted,
     int? totalMinutes,
     bool? isCompleted,
+    String? noteId,
   }) {
     return PomodoroActivity(
       id: id ?? this.id,
@@ -35,6 +38,7 @@ class PomodoroActivity {
       cyclesCompleted: cyclesCompleted ?? this.cyclesCompleted,
       totalMinutes: totalMinutes ?? this.totalMinutes,
       isCompleted: isCompleted ?? this.isCompleted,
+      noteId: noteId ?? this.noteId,
     );
   }
 
@@ -47,6 +51,7 @@ class PomodoroActivity {
       'cyclesCompleted': cyclesCompleted,
       'totalMinutes': totalMinutes,
       'isCompleted': isCompleted,
+      'noteId': noteId,
     };
   }
 
@@ -55,12 +60,13 @@ class PomodoroActivity {
       id: json['id'] as String,
       name: json['name'] as String,
       startTime: DateTime.parse(json['startTime'] as String),
-      endTime: json['endTime'] != null 
-          ? DateTime.parse(json['endTime'] as String) 
+      endTime: json['endTime'] != null
+          ? DateTime.parse(json['endTime'] as String)
           : null,
       cyclesCompleted: json['cyclesCompleted'] as int? ?? 0,
       totalMinutes: json['totalMinutes'] as int? ?? 0,
       isCompleted: json['isCompleted'] as bool? ?? false,
+      noteId: json['noteId'] as String?,
     );
   }
 
@@ -86,7 +92,8 @@ class PomodoroActivity {
   }
 
   /// Get the date only (no time) for grouping
-  DateTime get dateOnly => DateTime(startTime.year, startTime.month, startTime.day);
+  DateTime get dateOnly =>
+      DateTime(startTime.year, startTime.month, startTime.day);
 }
 
 /// Daily summary of pomodoro activities
@@ -101,7 +108,8 @@ class DailyPomodoroSummary {
 
   int get totalActivities => activities.length;
   int get completedActivities => activities.where((a) => a.isCompleted).length;
-  int get totalCycles => activities.fold(0, (sum, a) => sum + a.cyclesCompleted);
+  int get totalCycles =>
+      activities.fold(0, (sum, a) => sum + a.cyclesCompleted);
   int get totalMinutes => activities.fold(0, (sum, a) => sum + a.totalMinutes);
 
   String get formattedDate {
@@ -114,9 +122,21 @@ class DailyPomodoroSummary {
     if (dateOnly == yesterday) return 'Ayer';
 
     final weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    final months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 
-                    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',];
-    
+    final months = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
+
     return '${weekdays[date.weekday - 1]} ${date.day} ${months[date.month - 1]}';
   }
 }

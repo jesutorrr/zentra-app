@@ -1,8 +1,45 @@
 /// Application-wide constants
-/// 
+///
 /// This file centralizes magic numbers, strings, and configuration values
 /// to improve maintainability and consistency across the app.
 library;
+
+// ============================================================================
+// SPACING SCALE (4-point grid)
+// ============================================================================
+
+const double kSpaceXS = 4.0;
+const double kSpaceSM = 8.0;
+const double kSpaceMD = 12.0;
+const double kSpaceLG = 16.0;
+const double kSpaceXL = 20.0;
+const double kSpace2XL = 24.0;
+const double kSpace3XL = 32.0;
+const double kSpace4XL = 48.0;
+
+const double kRadiusSM = 8.0;
+const double kRadiusMD = 12.0;
+const double kRadiusLG = 16.0;
+const double kRadiusXL = 24.0;
+
+// ============================================================================
+// PUBLIC LINKS
+// ============================================================================
+
+/// Public privacy policy used by the app and App Store Connect.
+const String kPrivacyPolicyUrl =
+    'https://jesutorrr.github.io/zentra-app/privacy-policy.html';
+
+// ============================================================================
+// ONE-TIME PRODUCT NOTICES
+// ============================================================================
+
+/// Set when onboarding finishes with reminder permission denied.
+///
+/// Today consumes this as a dismissible, non-blocking explanation instead of
+/// turning the system decision into another onboarding step.
+const String kNotificationPermissionNoticePendingKey =
+    'notification_permission_notice_pending';
 
 // ============================================================================
 // TIME & DURATION CONSTANTS
@@ -13,34 +50,6 @@ const int kPomodoroRetentionDays = 30;
 
 /// Number of days to show in weekly progress chart
 const int kWeeklyProgressDays = 7;
-
-/// Default Pomodoro work duration in minutes
-const int kDefaultPomodoroDuration = 25;
-
-/// Default short break duration in minutes
-const int kDefaultShortBreakDuration = 5;
-
-/// Default long break duration in minutes
-const int kDefaultLongBreakDuration = 15;
-
-/// Number of pomodoros before a long break
-const int kPomodorosUntilLongBreak = 4;
-
-// ============================================================================
-// UI LAYOUT CONSTANTS
-// ============================================================================
-
-/// Maximum width for content on larger screens (tablets/web)
-const double kMaxContentWidth = 600.0;
-
-/// Standard page padding
-const double kPagePadding = 20.0;
-
-/// Standard card border radius
-const double kCardBorderRadius = 24.0;
-
-/// Standard small border radius
-const double kSmallBorderRadius = 12.0;
 
 // ============================================================================
 // EMOJI LISTS
@@ -62,8 +71,21 @@ const List<String> kAvatarEmojis = [
 
 /// Compact avatar emoji list for quick profile creation
 const List<String> kCompactAvatarEmojis = [
-  '😊', '😎', '🚀', '💪', '🔥', '⭐', '🎯', '🏆', '🌟', '💫',
-  '🦁', '🐯', '🦊', '🐻', '🐼',
+  '😊',
+  '😎',
+  '🚀',
+  '💪',
+  '🔥',
+  '⭐',
+  '🎯',
+  '🏆',
+  '🌟',
+  '💫',
+  '🦁',
+  '🐯',
+  '🦊',
+  '🐻',
+  '🐼',
 ];
 
 // ============================================================================
