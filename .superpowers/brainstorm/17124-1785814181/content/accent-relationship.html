@@ -1,0 +1,101 @@
+<style>
+  .direction-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; margin-top:24px; }
+  .direction { border:1px solid var(--border); border-radius:24px; overflow:hidden; background:var(--surface); cursor:pointer; transition:.2s ease; }
+  .direction:hover { transform:translateY(-2px); border-color:var(--accent); }
+  .direction.selected { outline:3px solid var(--accent); outline-offset:2px; }
+  .preview { padding:16px; min-height:280px; background:#eceae4; }
+  .preview.dark { background:#050807; }
+  .phone { border-radius:20px; padding:15px; min-height:245px; box-shadow:0 14px 35px rgba(0,0,0,.12); }
+  .phone.light { background:#f8f6f0; color:#1b2523; }
+  .phone.amoled { background:#000; color:#fff; border:1px solid #202725; }
+  .bar { height:8px; width:38%; border-radius:999px; margin-bottom:16px; }
+  .hero { border-radius:18px; padding:14px; margin:10px 0; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .swatches { display:grid; grid-template-columns:repeat(8,1fr); gap:7px; margin:12px 0 14px; }
+  .swatch { aspect-ratio:1; border-radius:50%; border:2px solid rgba(255,255,255,.7); box-shadow:0 0 0 1px rgba(0,0,0,.16); }
+  .pill { height:34px; border-radius:12px; flex:1; }
+  .tag { display:inline-flex; padding:5px 9px; border-radius:999px; font-size:11px; font-weight:750; letter-spacing:.03em; background:rgba(0,121,107,.11); color:#00796b; margin-bottom:7px; }
+  .direction-body { padding:18px; }
+  .direction-body h3 { margin:0 0 7px; }
+  .direction-body p { margin:0; color:var(--muted); font-size:14px; line-height:1.45; }
+  .recommend { color:#705d00; background:#fff3a6; }
+  .mini-toggle { margin:12px 0; padding:9px 10px; border-radius:12px; background:rgba(255,255,255,.8); display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:700; }
+  .switch { width:35px; height:20px; border-radius:999px; background:#6750a4; position:relative; }
+  .switch:after { content:""; position:absolute; width:14px; height:14px; border-radius:50%; right:3px; top:3px; background:#fff; }
+  @media(max-width:980px){ .direction-grid{grid-template-columns:1fr;} }
+</style>
+
+<h2>¿Cómo deben relacionarse los acentos Light y AMOLED?</h2>
+<p class="subtitle">Las tres opciones permiten paletas accesibles. La diferencia es cuánto control ve la persona y cuándo.</p>
+
+<div class="direction-grid">
+  <div class="direction" data-choice="independent" onclick="toggleSelect(this)">
+    <div class="preview">
+      <div class="phone light">
+        <span class="tag">LIGHT · AMARILLO SOL</span>
+        <div class="bar" style="background:#8a6b00"></div>
+        <div class="hero" style="background:#fff1a8">
+          <strong>Tu progreso</strong><br><small>El amarillo se oscurece donde necesita contraste.</small>
+        </div>
+        <div class="swatches">
+          <i class="swatch" style="background:#00796b"></i><i class="swatch" style="background:#4060c8"></i><i class="swatch" style="background:#7046b2"></i><i class="swatch" style="background:#b42b75"></i>
+          <i class="swatch" style="background:#d74735"></i><i class="swatch" style="background:#c26a00"></i><i class="swatch" style="background:#f5cc20"></i><i class="swatch" style="background:#56862c"></i>
+        </div>
+        <div class="row"><div class="pill" style="background:#8a6b00"></div><div class="pill" style="background:#fff1a8"></div></div>
+      </div>
+    </div>
+    <div class="direction-body">
+      <h3>A · Independientes siempre</h3>
+      <p>Dos selectores completos: 16 colores para Light y otros 16 para AMOLED. Máximo control, pero más decisiones desde el inicio.</p>
+    </div>
+  </div>
+
+  <div class="direction" data-choice="linked" onclick="toggleSelect(this)">
+    <div class="preview dark">
+      <div class="phone amoled">
+        <span class="tag" style="background:rgba(94,236,216,.14);color:#5eecd8">UNA IDENTIDAD · ADAPTADA</span>
+        <div class="bar" style="background:#ffd93d"></div>
+        <div class="hero" style="background:#201b00;border:1px solid #675b00">
+          <strong style="color:#ffe66f">Tu progreso</strong><br><small style="color:#d3cab0">Zentra genera automáticamente la versión AMOLED.</small>
+        </div>
+        <div class="swatches">
+          <i class="swatch" style="background:#00d8bd"></i><i class="swatch" style="background:#7795ff"></i><i class="swatch" style="background:#b996ff"></i><i class="swatch" style="background:#ff83bd"></i>
+          <i class="swatch" style="background:#ff8875"></i><i class="swatch" style="background:#ffad45"></i><i class="swatch" style="background:#ffd93d"></i><i class="swatch" style="background:#91d45e"></i>
+        </div>
+        <div class="row"><div class="pill" style="background:#ffd93d"></div><div class="pill" style="background:#201b00;border:1px solid #675b00"></div></div>
+      </div>
+    </div>
+    <div class="direction-body">
+      <h3>B · Vinculados siempre</h3>
+      <p>Se elige un solo color y el motor deriva Light/AMOLED. Es simple y coherente, pero no cumple del todo con editar ambos por separado.</p>
+    </div>
+  </div>
+
+  <div class="direction" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="preview" style="background:linear-gradient(120deg,#eceae4 0 50%,#050807 50%)">
+      <div class="phone light" style="background:linear-gradient(110deg,#f8f6f0 0 49%,#000 49%);color:#1b2523">
+        <span class="tag recommend">RECOMENDADA · CONTROL PROGRESIVO</span>
+        <div class="mini-toggle"><span>Personalizar AMOLED por separado</span><span class="switch"></span></div>
+        <div class="row">
+          <div style="flex:1;color:#1b2523">
+            <small><strong>LIGHT</strong></small>
+            <div class="hero" style="background:#e7dcff;color:#4d2585"><strong>Lavanda</strong></div>
+          </div>
+          <div style="flex:1;color:#fff">
+            <small><strong>AMOLED</strong></small>
+            <div class="hero" style="background:#241434;color:#d9b8ff;border:1px solid #7046b2"><strong>Violeta</strong></div>
+          </div>
+        </div>
+        <div class="swatches">
+          <i class="swatch" style="background:#00796b"></i><i class="swatch" style="background:#4060c8"></i><i class="swatch" style="background:#7046b2"></i><i class="swatch" style="background:#b42b75"></i>
+          <i class="swatch" style="background:#d74735"></i><i class="swatch" style="background:#c26a00"></i><i class="swatch" style="background:#f5cc20"></i><i class="swatch" style="background:#56862c"></i>
+        </div>
+        <div class="row"><div class="pill" style="background:#7046b2"></div><div class="pill" style="background:#b996ff"></div></div>
+      </div>
+    </div>
+    <div class="direction-body">
+      <h3>C · Híbrido inteligente</h3>
+      <p>Un color base por defecto; un switch revela control independiente para AMOLED. Mantiene la experiencia minimalista sin quitar poder.</p>
+    </div>
+  </div>
+</div>

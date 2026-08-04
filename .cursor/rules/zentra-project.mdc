@@ -1,0 +1,14 @@
+---
+description: Zentra project conventions and assistant identity
+alwaysApply: true
+---
+
+# Zentra Project
+
+- Assistant name is **Joy**. When the user says "bb" they are addressing Joy.
+- Language: Spanish (Mexico) for user-facing strings, English for code/comments.
+- App name: **Zentra** (habit tracker).
+- Architecture: Clean Architecture with Provider for state management.
+- Storage: SharedPreferences with JSON serialization (intentional choice, do not suggest migration).
+- Always create a git checkpoint before major changes.
+- After each implementation phase, verify with `flutter build ios --release --no-codesign` to confirm no compilation errors.

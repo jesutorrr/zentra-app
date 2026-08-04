@@ -1,0 +1,101 @@
+<style>
+  .stage { display:flex; justify-content:center; padding:24px 12px 36px; }
+  .device { width:min(430px,100%); border:10px solid #171918; border-radius:44px; overflow:hidden; box-shadow:0 28px 70px rgba(0,0,0,.25); background:#000; }
+  .status { height:25px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; letter-spacing:.04em; }
+  .pane { min-height:365px; padding:18px 18px 16px; position:relative; }
+  .light-pane { background:#f8f6f0; color:#1b2523; }
+  .dark-pane { background:#000; color:#fff; border-top:2px solid #5eecd8; }
+  .pane-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .mode { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:850; }
+  .mode-icon { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-size:16px; }
+  .selection { font-size:11px; font-weight:750; padding:6px 9px; border-radius:999px; }
+  .live-card { border-radius:20px; padding:15px; margin-bottom:15px; overflow:hidden; position:relative; }
+  .live-card:after { content:""; position:absolute; width:90px; height:90px; border-radius:50%; right:-30px; top:-35px; background:currentColor; opacity:.08; }
+  .eyebrow { font-size:9px; font-weight:850; letter-spacing:.12em; opacity:.7; }
+  .live-title { font-size:18px; font-weight:850; margin:5px 0 4px; }
+  .progress { height:7px; border-radius:99px; margin-top:11px; overflow:hidden; }
+  .progress > i { display:block; width:68%; height:100%; border-radius:inherit; }
+  .palette-label { font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; opacity:.62; margin-bottom:10px; }
+  .swatches { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; }
+  .swatch { aspect-ratio:1; border-radius:50%; position:relative; box-shadow:0 0 0 1px rgba(80,80,80,.22); }
+  .swatch.selected:after { content:"✓"; position:absolute; inset:0; display:grid; place-items:center; color:white; font-size:12px; font-weight:900; text-shadow:0 1px 3px rgba(0,0,0,.55); }
+  .dark-pane .swatch { box-shadow:0 0 0 1px rgba(255,255,255,.28); }
+  .divider-label { position:absolute; left:50%; top:-14px; transform:translateX(-50%); padding:5px 12px; border-radius:99px; background:#102b26; color:#8ff7e8; border:1px solid #28675c; font-size:9px; font-weight:850; letter-spacing:.09em; white-space:nowrap; }
+  .save { margin-top:17px; width:100%; border:0; border-radius:15px; padding:13px; font-weight:850; color:#001f1b; background:#5eecd8; }
+  .callouts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:22px; }
+  .callout { border:1px solid var(--border); border-radius:16px; padding:14px; background:var(--surface); }
+  .callout strong { display:block; margin-bottom:4px; }
+  .callout span { color:var(--muted); font-size:13px; line-height:1.4; }
+  .approval { max-width:620px; margin:0 auto; }
+  @media(max-width:700px){ .callouts{grid-template-columns:1fr;} .stage{padding-inline:0;} }
+</style>
+
+<h2>Personalizar Zentra · división vertical</h2>
+<p class="subtitle">Light ocupa la mitad superior y AMOLED la inferior. Las selecciones son completamente independientes.</p>
+
+<div class="stage">
+  <div class="device">
+    <div class="status" style="background:#f8f6f0;color:#1b2523">9:41</div>
+
+    <section class="pane light-pane">
+      <div class="pane-head">
+        <div class="mode">
+          <span class="mode-icon" style="background:#fff1a8;color:#8a6b00">☀</span>
+          Tema Light
+        </div>
+        <span class="selection" style="background:#d8f3ed;color:#00695c">Teal clásico</span>
+      </div>
+      <div class="live-card" style="background:#d8f3ed;color:#004d43;border:1px solid #9dd8cf">
+        <div class="eyebrow">VISTA PREVIA EN VIVO</div>
+        <div class="live-title">Hoy cuenta ✦</div>
+        <small>3 de 5 hábitos completados</small>
+        <div class="progress" style="background:#b3d9d2"><i style="background:#00796b"></i></div>
+      </div>
+      <div class="palette-label">Elige el acento Light</div>
+      <div class="swatches">
+        <i class="swatch selected" style="background:#00796b"></i><i class="swatch" style="background:#167c54"></i><i class="swatch" style="background:#527a27"></i><i class="swatch" style="background:#8a6b00"></i>
+        <i class="swatch" style="background:#b35800"></i><i class="swatch" style="background:#bc3f35"></i><i class="swatch" style="background:#af316d"></i><i class="swatch" style="background:#7748a6"></i>
+        <i class="swatch" style="background:#4f5bb5"></i><i class="swatch" style="background:#326aaf"></i><i class="swatch" style="background:#14768c"></i><i class="swatch" style="background:#546e7a"></i>
+        <i class="swatch" style="background:#7b6256"></i><i class="swatch" style="background:#6c5f78"></i><i class="swatch" style="background:#495b47"></i><i class="swatch" style="background:#303a38"></i>
+      </div>
+    </section>
+
+    <section class="pane dark-pane">
+      <span class="divider-label">AMOLED · NEGRO REAL</span>
+      <div class="pane-head">
+        <div class="mode">
+          <span class="mode-icon" style="background:#0e2b25;color:#5eecd8">◐</span>
+          Tema AMOLED
+        </div>
+        <span class="selection" style="background:#0e2b25;color:#5eecd8">Cyan neón</span>
+      </div>
+      <div class="live-card" style="background:#071714;color:#b9fff4;border:1px solid #1f594f">
+        <div class="eyebrow">VISTA PREVIA EN VIVO</div>
+        <div class="live-title">Enfócate ahora ✦</div>
+        <small style="color:#b8c4c1">25 minutos de calma</small>
+        <div class="progress" style="background:#153c35"><i style="background:#5eecd8"></i></div>
+      </div>
+      <div class="palette-label">Elige el acento AMOLED</div>
+      <div class="swatches">
+        <i class="swatch selected" style="background:#5eecd8"></i><i class="swatch" style="background:#74eca9"></i><i class="swatch" style="background:#a7e66d"></i><i class="swatch" style="background:#ffe26b"></i>
+        <i class="swatch" style="background:#ffad58"></i><i class="swatch" style="background:#ff8172"></i><i class="swatch" style="background:#ff7fb5"></i><i class="swatch" style="background:#c8a1ff"></i>
+        <i class="swatch" style="background:#96a9ff"></i><i class="swatch" style="background:#70b7ff"></i><i class="swatch" style="background:#57d4ee"></i><i class="swatch" style="background:#b0bec5"></i>
+        <i class="swatch" style="background:#d5b7a8"></i><i class="swatch" style="background:#c9b6d8"></i><i class="swatch" style="background:#b7cbb4"></i><i class="swatch" style="background:#f2f5f4"></i>
+      </div>
+      <button class="save">Guardar ambos temas</button>
+    </section>
+  </div>
+</div>
+
+<div class="callouts">
+  <div class="callout"><strong>Arriba: Light</strong><span>Colores más profundos para conservar contraste sobre fondos claros.</span></div>
+  <div class="callout"><strong>Abajo: AMOLED</strong><span>Versiones luminosas que vibran sobre negro real sin perder legibilidad.</span></div>
+  <div class="callout"><strong>Una sola acción</strong><span>Exploras ambos libremente y “Guardar ambos temas” confirma la pareja.</span></div>
+</div>
+
+<div class="approval options" style="margin-top:22px">
+  <div class="option" data-choice="approve-vertical-split" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content"><h3>Esta es la dirección</h3><p>Light arriba, AMOLED abajo y 16 acentos independientes en cada mitad.</p></div>
+  </div>
+</div>
