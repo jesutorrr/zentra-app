@@ -1,206 +1,94 @@
-# Habit Tracker - Gamified Habit Tracking App
+# Zentra
 
-A modern, gamified habit tracker built with Flutter following Clean Architecture principles. Track your daily habits across multiple categories with beautiful Material 3 UI.
+Zentra es una app Flutter local-first para organizar hábitos, notas, sesiones de
+enfoque y progreso personal. La experiencia principal funciona sin cuenta remota
+ni conexión a internet.
 
-## 🎯 Features
+## Estado actual
 
-- **Daily Progress Tracking**: Visual progress bar showing completion status
-- **Category System**: Organize habits by Agua, Movimiento, Sueño, Foco, and Varios
-- **Flexible Frequency**: Set habits for specific days or all days
-- **Quick Actions**: Fast setup with "Everyday", "Weekdays", and "Weekends" presets
-- **Persistent Storage**: All data saved locally using SharedPreferences
-- **Material 3 Design**: Modern, clean UI with purple/indigo theme
-- **Dark Mode Support**: Automatic theme switching based on system preferences
+- Acceso local y restauración desde respaldo.
+- Onboarding, hábitos, calendario, notas, Pomodoro, progreso y perfil.
+- Temas claro, oscuro y del sistema.
+- Navegación adaptable para teléfono y tablet.
+- Recordatorios locales, quick actions y manejo del ciclo de vida.
+- Exportación, restauración y eliminación de datos por dueño.
 
-## 🏗️ Architecture
+La nube está estacionada en la build vigente. Supabase no se inicializa, no se
+restaura una sesión remota, no se crea outbox y la interfaz no muestra acceso,
+vinculación, cierre o eliminación de cuenta remota. Un espacio que antes estuvo
+vinculado conserva el mismo identificador de dueño y todos sus datos de Drift,
+pero se abre como espacio local.
 
-This app follows **Clean Architecture** principles with clear separation of concerns:
+La integración de Supabase permanece aislada y compilable para retomarla cuando
+el producto local esté cerrado. Reactivarla requiere el flag explícito
+`ZENTRA_CLOUD_ENABLED=true`, además de las variables del ambiente y todos los
+gates de seguridad descritos en la documentación. Incluir sólo URL y clave ya
+no enciende la nube por accidente.
 
-```
+## Arquitectura
+
+```text
 lib/
-├── domain/              # Pure Dart - Business Logic
-│   └── models.dart      # Entities, Enums, Repository Interface
-├── infrastructure/      # External Dependencies
-│   └── local_storage_repository.dart  # SharedPreferences Implementation
-├── application/         # State Management
-│   └── habit_provider.dart  # Provider (ChangeNotifier)
-└── presentation/        # UI Layer
-    ├── theme.dart       # Material 3 Theme Configuration
-    ├── today_screen.dart  # Main Screen
-    ├── habit_form_screen.dart  # Create/Edit Screen
-    └── main.dart        # App Entry Point
+├── domain/          # Entidades y contratos sin UI
+├── infrastructure/  # Drift, SharedPreferences y servicios de plataforma
+├── application/     # Controladores y estado con Riverpod
+└── presentation/    # Pantallas, widgets, tema y layout adaptable
 ```
 
-### Layer Responsibilities
+Drift es la fuente canónica por dueño para perfil, hábitos, logs, tareas
+completadas, sesiones terminadas, tema portable y progreso de enfoque.
+SharedPreferences queda limitado a sesión local, cache de tema para el arranque,
+configuración específica del dispositivo, Pomodoro en curso y fallback por
+dueño durante la migración legacy.
 
-1. **Domain Layer** (`lib/domain/`):
-   - Pure Dart code (no Flutter dependencies)
-   - Contains business entities: `Habit`, `HabitLog`, `Frequency`
-   - Defines repository contracts
-   - Business logic: frequency scheduling, date matching
+Al arrancar, `LocalPersistenceRuntime` migra cada dueño existente a Drift,
+verifica conteos y checksum, y mantiene el almacenamiento anterior únicamente
+para el dueño cuya migración haya fallado. Notas ya usan Drift con aislamiento
+por dueño.
 
-2. **Infrastructure Layer** (`lib/infrastructure/`):
-   - Implements repository interfaces
-   - Handles data persistence with SharedPreferences
-   - JSON serialization/deserialization
+## Ejecutar localmente
 
-3. **Application Layer** (`lib/application/`):
-   - State management using Provider
-   - Coordinates between domain and presentation
-   - Calculates daily progress and statistics
+El repositorio incluye su Flutter SDK bajo `flutter/`.
 
-4. **Presentation Layer** (`lib/presentation/`):
-   - Flutter UI components
-   - Screens and widgets
-   - Theme configuration
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Flutter SDK (3.0.0 or higher)
-- Dart SDK (3.0.0 or higher)
-
-### Installation
-
-1. Clone the repository:
 ```bash
-cd /Users/jesutorr/Documents/001CodigosCursos/03ConFlutter
+./flutter/bin/flutter pub get
+./flutter/bin/flutter run
 ```
 
-2. Install dependencies:
+## Gates de calidad
+
 ```bash
-flutter pub get
+./flutter/bin/flutter analyze --no-pub
+./flutter/bin/flutter test --no-pub
+./flutter/bin/dart run tool/run_screen_reviewer.dart
 ```
 
-3. Run the app:
+El Screen Reviewer usa widgets y repositorios de producción, recorre el producto
+en simuladores iPhone y iPad, toma 41 capturas por dispositivo y deja el reporte
+bajo `build/screen-review/<timestamp>/report.md`.
+
+## Supabase estacionado
+
+El trabajo de nube queda apartado bajo `supabase/` y su diseño completo vive en
+[`docs/zentra-v3-supabase-auth-sync-plan.md`](docs/zentra-v3-supabase-auth-sync-plan.md).
+El contrato actual vive en
+[`docs/zentra-cloud-parking-plan.md`](docs/zentra-cloud-parking-plan.md). No se
+ejecuta `supabase db push`, no se despliegan funciones y no se habilita OAuth
+remoto durante esta fase.
+
+La integración local completa se verifica contra Postgres y Realtime reales con:
+
 ```bash
-flutter run
+./flutter/bin/flutter test --no-pub \
+  test/integration/supabase_sync_integration_test.dart \
+  --dart-define=SUPABASE_TEST_URL=http://127.0.0.1:54321 \
+  --dart-define=SUPABASE_TEST_PUBLISHABLE_KEY=VALOR_LOCAL
 ```
 
-## 📦 Dependencies
+## Documentación
 
-- **provider**: ^6.1.1 - State management
-- **shared_preferences**: ^2.2.2 - Local data persistence
-- **uuid**: ^4.2.2 - Unique ID generation
-- **intl**: ^0.19.0 - Date formatting and localization
-- **google_fonts**: ^6.1.0 - Typography (Inter font family)
-
-## 💡 Usage
-
-### Creating a Habit
-
-1. Tap the "Nuevo Hábito" button
-2. Enter a title for your habit
-3. Select a category (Agua, Movimiento, Sueño, Foco, Varios)
-4. Choose frequency:
-   - **Semanal**: Select specific days of the week
-   - **Manual**: Habit appears every day
-5. Use quick actions for common patterns:
-   - "Todos los días" - All 7 days
-   - "Entre semana" - Monday to Friday
-   - "Fines de semana" - Saturday and Sunday
-
-### Completing Habits
-
-- Tap on a habit card to mark it as complete
-- Tap again to unmark
-- Progress bar updates automatically
-- Completed habits show strikethrough text
-
-### Editing Habits
-
-- Long-press on a habit card to open edit screen
-- Update any field and tap "Actualizar"
-- Delete option available in edit mode
-
-## 🎨 Design System
-
-### Categories & Colors
-
-| Category | Icon | Color |
-|----------|------|-------|
-| Agua | 💧 Water Drop | Blue |
-| Movimiento | 🏃 Runner | Orange |
-| Sueño | 🌙 Bedtime | Purple |
-| Foco | 🧠 Psychology | Green |
-| Varios | 📊 Dashboard | Grey |
-
-### Theme
-
-- **Primary Color**: Soft Purple (#6750A4)
-- **Typography**: Inter (Google Fonts)
-- **Design System**: Material 3
-- **Border Radius**: Consistent 12-20px rounded corners
-- **Spacing**: 8px grid system
-
-## 🔧 Technical Details
-
-### Frequency Logic
-
-The app uses intelligent frequency scheduling:
-
-- **Weekly Mode**: Habits only appear on selected weekdays
-- **Manual Mode**: Habits appear every day
-- **Date Matching**: Uses `DateTime.weekday` (1=Monday, 7=Sunday)
-
-### Data Persistence
-
-All data is stored locally using SharedPreferences:
-- **Habits**: Stored as JSON array under key `habits`
-- **Logs**: Stored as JSON array under key `habit_logs`
-- **Automatic Save**: Every create/update/delete operation
-
-### State Management
-
-Provider pattern with ChangeNotifier:
-- Centralized state in `HabitProvider`
-- Reactive UI updates
-- Computed properties for progress calculation
-
-## 📱 Screenshots
-
-### Main Screen
-- Daily progress bar with percentage
-- List of today's habits
-- Category badges and completion checkboxes
-
-### Habit Form
-- Text input for title
-- Category selection chips
-- Frequency configuration
-- Quick action buttons
-
-### Empty State
-- Friendly onboarding message
-- Clear call-to-action
-
-## 🧪 Testing
-
-To run tests (when implemented):
-```bash
-flutter test
-```
-
-## 🤝 Contributing
-
-This is an educational project. Feel free to fork and modify for learning purposes.
-
-## 📄 License
-
-This project is created for educational purposes.
-
-## 🎓 Learning Resources
-
-This project demonstrates:
-- Clean Architecture in Flutter
-- Provider state management
-- Material 3 design implementation
-- Local data persistence
-- Date/time handling in Dart
-- Custom UI components
-- Form validation
-
----
-
-Built with ❤️ using Flutter
+- [Screen Reviewer](docs/screen-reviewer.md)
+- [Contrato de nube estacionada](docs/zentra-cloud-parking-plan.md)
+- [Plan V3 de autenticación y sincronización](docs/zentra-v3-supabase-auth-sync-plan.md)
+- [Configuración de Supabase Auth](docs/supabase-auth-setup.md)
+- [Plan de experiencia V2](docs/zentra-calma-precisa-notas-activas-plan-v2.md)

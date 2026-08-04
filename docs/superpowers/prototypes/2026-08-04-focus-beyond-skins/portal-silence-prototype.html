@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zentra Focus · Portal + Silencio</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --cream: #f6f1e7;
+      --cream-2: #ece5d8;
+      --forest: #103a30;
+      --forest-deep: #092b24;
+      --sage: #9ed7bd;
+      --sage-soft: #d8eadf;
+      --ink: #11201c;
+      --muted-light: rgba(246, 241, 231, .58);
+      --muted-dark: rgba(17, 32, 28, .58);
+      --coral: #eb775e;
+      --amber: #e8ad57;
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+    button { font: inherit; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 20% 15%, rgba(86, 139, 113, .16), transparent 30%),
+        #090b0a;
+      color: #f4f1ea;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      min-height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) auto minmax(240px, .75fr);
+      gap: clamp(24px, 5vw, 76px);
+      align-items: center;
+      padding: 32px 0;
+    }
+
+    .intro { align-self: center; }
+    .eyebrow { color: #93a198; font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+    h1 { max-width: 480px; margin: 14px 0 20px; font-size: clamp(42px, 6vw, 82px); line-height: .92; letter-spacing: -.06em; }
+    .intro p { max-width: 430px; color: #949d97; font-size: 16px; line-height: 1.6; }
+    .principle { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; color: #d4d8d4; font-size: 13px; }
+    .principle::before { content: ""; width: 28px; height: 1px; background: var(--sage); }
+
+    .device {
+      position: relative;
+      width: 410px;
+      padding: 10px;
+      border-radius: 58px;
+      background: #030404;
+      box-shadow: 0 36px 90px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .13);
+    }
+    .island { position: absolute; z-index: 20; top: 21px; left: 50%; width: 112px; height: 30px; translate: -50% 0; border-radius: 18px; background: #020303; }
+
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      border-radius: 49px;
+      background: var(--cream);
+      color: var(--ink);
+      isolation: isolate;
+    }
+
+    .grain {
+      position: absolute;
+      z-index: 12;
+      inset: 0;
+      pointer-events: none;
+      opacity: .025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+    }
+
+    .portal-fill {
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      top: 326px;
+      width: 314px;
+      height: 314px;
+      translate: -50% 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 30%, #17493d, var(--forest) 62%, var(--forest-deep));
+      transition: width .9s var(--ease), height .9s var(--ease), top .9s var(--ease), border-radius .9s var(--ease);
+    }
+    .rest-wash {
+      position: absolute;
+      z-index: 2;
+      inset: -180px;
+      background: radial-gradient(circle at 50% 45%, #fbf7ef, var(--cream));
+      clip-path: circle(0% at 50% 48%);
+      transition: clip-path 1s var(--ease);
+    }
+
+    .phone:not([data-state="prepare"]) .portal-fill { top: -150px; width: 760px; height: 1140px; border-radius: 46%; }
+    .phone[data-state="rest"] .rest-wash,
+    .phone[data-state="complete"] .rest-wash { clip-path: circle(75% at 50% 48%); }
+
+    .status {
+      position: absolute;
+      z-index: 15;
+      top: 17px;
+      left: 28px;
+      right: 28px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 650;
+      transition: color .5s var(--ease);
+    }
+    .status-icons { letter-spacing: .08em; }
+
+    .topbar {
+      position: absolute;
+      z-index: 14;
+      top: 58px;
+      left: 23px;
+      right: 23px;
+      display: flex;
+      justify-content: space-between;
+      transition: color .55s var(--ease), opacity .5s ease;
+    }
+
+    .icon-button {
+      width: 46px;
+      height: 46px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      opacity: .66;
+      transition: opacity .2s ease, scale .2s ease;
+    }
+    .icon-button:hover, .icon-button:focus-visible { opacity: 1; scale: 1.04; outline: none; }
+
+    .hero {
+      position: absolute;
+      z-index: 5;
+      top: 122px;
+      left: 30px;
+      right: 28px;
+      transition: opacity .38s ease, translate .55s var(--ease);
+    }
+    .hero h2 { max-width: 305px; margin: 0; font-size: 42px; font-weight: 530; line-height: .98; letter-spacing: -.055em; }
+    .hero p { max-width: 290px; margin: 15px 0 0; color: var(--muted-dark); font-size: 15px; line-height: 1.42; }
+    .mode { display: flex; gap: 22px; margin-top: 18px; font-size: 12px; font-weight: 650; }
+    .mode span:first-child::after { content: ""; display: block; width: 100%; height: 2px; margin-top: 4px; border-radius: 2px; background: var(--forest); }
+
+    .dial {
+      position: absolute;
+      z-index: 6;
+      top: 332px;
+      left: 50%;
+      width: 302px;
+      height: 302px;
+      translate: -50% 0;
+      color: var(--cream);
+      transition: top .9s var(--ease), width .9s var(--ease), height .9s var(--ease), color .6s ease;
+    }
+    .dial svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: 120deg; overflow: visible; }
+    .dial circle { fill: none; stroke-width: 1.7; transform-origin: center; transition: stroke-dasharray .85s var(--ease), stroke .6s ease, opacity .5s ease; }
+    .dial .track { stroke: currentColor; opacity: .17; }
+    .dial .progress { stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 682 880; }
+    .dial .point { fill: var(--sage); stroke: none; filter: drop-shadow(0 0 5px rgba(158, 215, 189, .55)); }
+
+    .dial-content { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .duration { font-size: 78px; font-weight: 265; line-height: .86; letter-spacing: -.075em; font-variant-numeric: tabular-nums; }
+    .duration-unit { margin-top: 11px; font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; opacity: .64; }
+
+    .enter {
+      position: absolute;
+      left: 50%;
+      bottom: 36px;
+      translate: -50% 0;
+      width: 138px;
+      height: 46px;
+      border: 1px solid rgba(246, 241, 231, .55);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--cream);
+      cursor: pointer;
+      font-weight: 620;
+      letter-spacing: .01em;
+    }
+    .enter::after { content: "  →"; }
+
+    .presets {
+      position: absolute;
+      z-index: 7;
+      top: 657px;
+      left: 50%;
+      translate: -50% 0;
+      display: flex;
+      gap: 22px;
+      color: var(--muted-dark);
+      font-size: 12px;
+      transition: opacity .32s ease, translate .5s var(--ease);
+    }
+    .presets button { border: 0; padding: 5px; background: transparent; color: inherit; cursor: pointer; }
+    .presets .selected { color: var(--forest); font-weight: 750; }
+    .linked-note {
+      position: absolute;
+      z-index: 7;
+      left: 30px;
+      right: 30px;
+      bottom: 48px;
+      display: flex;
+      justify-content: space-between;
+      padding-top: 14px;
+      border-top: 1px solid rgba(17, 32, 28, .13);
+      color: var(--muted-dark);
+      font-size: 13px;
+      transition: opacity .35s ease, translate .5s var(--ease);
+    }
+
+    .stage {
+      position: absolute;
+      z-index: 7;
+      top: 137px;
+      left: 0;
+      right: 0;
+      opacity: 0;
+      color: var(--sage);
+      text-align: center;
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+      translate: 0 8px;
+      transition: opacity .5s .3s ease, translate .7s .3s var(--ease), color .55s ease;
+    }
+    .running-time, .paused-time, .rest-time { display: none; }
+    .context {
+      position: absolute;
+      z-index: 8;
+      top: 531px;
+      left: 28px;
+      right: 28px;
+      opacity: 0;
+      color: var(--muted-light);
+      text-align: center;
+      font-size: 14px;
+      transition: opacity .45s .35s ease, color .5s ease;
+    }
+    .focus-note {
+      position: absolute;
+      z-index: 8;
+      top: 615px;
+      left: 28px;
+      right: 28px;
+      opacity: 0;
+      color: rgba(246, 241, 231, .82);
+      text-align: center;
+      font-size: 13px;
+      transition: opacity .45s .4s ease, color .5s ease;
+    }
+    .focus-note::before { content: "⌑"; margin-right: 8px; color: var(--sage); }
+
+    .controls {
+      position: absolute;
+      z-index: 9;
+      left: 24px;
+      right: 24px;
+      bottom: 44px;
+      display: grid;
+      grid-template-columns: 48px 1fr 48px;
+      gap: 12px;
+      opacity: 0;
+      translate: 0 18px;
+      transition: opacity .48s .45s ease, translate .7s .45s var(--ease), color .5s ease;
+    }
+    .controls button { height: 50px; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
+    .controls .round { border-radius: 50%; opacity: .58; }
+    .controls .primary { border-radius: 999px; background: var(--cream); border-color: var(--cream); color: var(--forest-deep); font-weight: 690; }
+
+    .complete {
+      position: absolute;
+      z-index: 10;
+      inset: 0;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      padding: 40px 28px;
+      opacity: 0;
+      pointer-events: none;
+      text-align: center;
+      transition: opacity .55s .25s ease;
+    }
+    .seal { width: 156px; height: 156px; display: grid; place-items: center; border: 1.5px solid var(--forest); border-radius: 50%; font-size: 40px; transform: scale(.72); transition: transform .75s .25s var(--ease); }
+    .complete .micro { margin-top: 34px; color: var(--forest); font-size: 10px; font-weight: 750; letter-spacing: .22em; }
+    .complete h3 { margin: 13px 0 8px; font-size: 38px; line-height: .97; letter-spacing: -.05em; }
+    .complete p { margin: 0; color: var(--muted-dark); }
+    .done { width: 100%; height: 52px; margin-top: 56px; border: 0; border-radius: 999px; background: var(--forest); color: var(--cream); font-weight: 690; cursor: pointer; }
+
+    .sheet-backdrop { position: absolute; z-index: 17; inset: 0; background: rgba(2, 8, 6, .46); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+    .sheet { position: absolute; z-index: 18; left: 10px; right: 10px; bottom: 10px; padding: 18px 20px 24px; border-radius: 28px 28px 39px 39px; background: var(--cream); color: var(--ink); translate: 0 110%; transition: translate .55s var(--ease); }
+    .sheet-handle { width: 38px; height: 4px; margin: 0 auto 28px; border-radius: 4px; background: rgba(17, 32, 28, .2); }
+    .sheet h3 { margin: 0; font-size: 27px; letter-spacing: -.035em; }
+    .sheet p { margin: 10px 0 24px; color: var(--muted-dark); font-size: 14px; }
+    .sheet-safe { width: 100%; height: 50px; border: 0; border-radius: 999px; background: var(--forest); color: var(--cream); font-weight: 690; cursor: pointer; }
+    .sheet-danger { width: 100%; margin-top: 12px; border: 0; padding: 10px; background: transparent; color: var(--coral); cursor: pointer; }
+    .phone.sheet-open .sheet-backdrop { opacity: 1; pointer-events: auto; }
+    .phone.sheet-open .sheet { translate: 0 0; }
+
+    /* Shared-object states */
+    .phone:not([data-state="prepare"]) { color: var(--cream); }
+    .phone:not([data-state="prepare"]) .status,
+    .phone:not([data-state="prepare"]) .topbar { color: var(--cream); }
+    .phone:not([data-state="prepare"]) .hero,
+    .phone:not([data-state="prepare"]) .presets,
+    .phone:not([data-state="prepare"]) .linked-note,
+    .phone:not([data-state="prepare"]) .enter { opacity: 0; pointer-events: none; translate: -50% 18px; }
+    .phone:not([data-state="prepare"]) .hero,
+    .phone:not([data-state="prepare"]) .linked-note { translate: 0 -14px; }
+    .phone:not([data-state="prepare"]) .dial { top: 184px; width: 328px; height: 328px; }
+    .phone:not([data-state="prepare"]) .stage,
+    .phone:not([data-state="prepare"]) .context,
+    .phone:not([data-state="prepare"]) .focus-note,
+    .phone:not([data-state="prepare"]) .controls { opacity: 1; translate: 0 0; }
+    .phone:not([data-state="prepare"]) .prepare-time { display: none; }
+    .phone[data-state="active"] .running-time { display: inline; }
+    .phone[data-state="paused"] .paused-time { display: inline; }
+    .phone[data-state="rest"] .rest-time { display: inline; }
+
+    .phone[data-state="paused"] .dial .progress { stroke-dasharray: 540 18 88 234; }
+    .phone[data-state="paused"] .dial .point { opacity: .38; }
+    .phone[data-state="paused"] .controls .primary { background: var(--sage); border-color: var(--sage); }
+
+    .phone[data-state="rest"] { color: var(--ink); }
+    .phone[data-state="rest"] .status,
+    .phone[data-state="rest"] .topbar,
+    .phone[data-state="rest"] .dial { color: var(--ink); }
+    .phone[data-state="rest"] .stage { color: #557e69; }
+    .phone[data-state="rest"] .dial .track { opacity: .1; }
+    .phone[data-state="rest"] .dial .progress { stroke: #7fb89b; stroke-dasharray: 312 568; }
+    .phone[data-state="rest"] .context { color: var(--muted-dark); }
+    .phone[data-state="rest"] .focus-note { opacity: 0; }
+    .phone[data-state="rest"] .controls { color: var(--forest); }
+    .phone[data-state="rest"] .controls .primary { background: var(--forest); border-color: var(--forest); color: var(--cream); }
+
+    .phone[data-state="complete"] { color: var(--ink); }
+    .phone[data-state="complete"] .topbar,
+    .phone[data-state="complete"] .dial,
+    .phone[data-state="complete"] .stage,
+    .phone[data-state="complete"] .context,
+    .phone[data-state="complete"] .focus-note,
+    .phone[data-state="complete"] .controls { opacity: 0; pointer-events: none; }
+    .phone[data-state="complete"] .status { color: var(--ink); }
+    .phone[data-state="complete"] .complete { opacity: 1; pointer-events: auto; }
+    .phone[data-state="complete"] .seal { transform: scale(1); }
+
+    .side { align-self: center; }
+    .side h2 { margin: 0 0 12px; font-size: 21px; letter-spacing: -.03em; }
+    .side p { margin: 0 0 24px; color: #929b95; font-size: 14px; line-height: 1.55; }
+    .steps { display: grid; gap: 8px; }
+    .step {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 13px;
+      background: transparent;
+      color: #b9bfbb;
+      text-align: left;
+      cursor: pointer;
+    }
+    .step span:first-child { color: #657068; font-size: 11px; }
+    .step.current { border-color: rgba(158, 215, 189, .62); background: rgba(158, 215, 189, .08); color: #eef2ee; }
+    .hint { margin-top: 22px; color: #69726c; font-size: 11px; line-height: 1.5; }
+
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; justify-items: center; padding: 52px 0 72px; }
+      .intro, .side { width: min(100%, 610px); }
+      .intro { text-align: center; }
+      .intro p { margin-left: auto; margin-right: auto; }
+      .principle { justify-content: center; }
+      .side { text-align: center; }
+      .steps { grid-template-columns: repeat(5, 1fr); }
+      .step { display: block; text-align: center; }
+      .step span:first-child { display: none; }
+    }
+    @media (max-width: 500px) {
+      main { width: 100%; padding-top: 24px; }
+      .intro, .side { width: calc(100% - 30px); }
+      .device { width: min(410px, 100vw); border-radius: 0; padding: 0; }
+      .phone { width: 100%; height: min(844px, calc(100vh - 20px)); border-radius: 0; }
+      .island { top: 11px; }
+      .steps { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; transition-delay: 0ms !important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="intro">
+      <span class="eyebrow">Concepto ganador · 01</span>
+      <h1>Entrar<br>al tiempo.</h1>
+      <p>El dial no navega hacia otra pantalla. Se expande hasta convertirse en el espacio de enfoque. Cuando llega el descanso, la crema vuelve a entrar por el mismo círculo.</p>
+      <span class="principle">La interfaz se mueve sólo cuando cambia el estado.</span>
+    </section>
+
+    <div class="device" aria-label="Prototipo interactivo de Zentra Focus">
+      <div class="island" aria-hidden="true"></div>
+      <section class="phone" id="phone" data-state="prepare">
+        <div class="portal-fill"></div>
+        <div class="rest-wash"></div>
+        <div class="grain"></div>
+
+        <div class="status"><span>9:41</span><span class="status-icons">● ᯤ ▰</span></div>
+        <nav class="topbar" aria-label="Navegación de enfoque">
+          <button class="icon-button" id="back" type="button" aria-label="Atrás">←</button>
+          <button class="icon-button" type="button" aria-label="Historial">◷</button>
+        </nav>
+
+        <header class="hero">
+          <h2>Haz espacio para una sola cosa</h2>
+          <p>Elige un ritmo y deja que Zentra cuide el tiempo.</p>
+          <div class="mode"><span>Rápido</span><span>Ciclo</span></div>
+        </header>
+
+        <div class="dial" aria-live="polite">
+          <svg viewBox="0 0 302 302" aria-hidden="true">
+            <circle class="track" cx="151" cy="151" r="140"></circle>
+            <circle class="progress" cx="151" cy="151" r="140"></circle>
+            <circle class="point" cx="77" cy="32" r="5"></circle>
+          </svg>
+          <div class="dial-content">
+            <span class="duration prepare-time">25</span>
+            <span class="duration running-time">24:58</span>
+            <span class="duration paused-time">24:57</span>
+            <span class="duration rest-time">04:32</span>
+            <span class="duration-unit prepare-time">minutos</span>
+          </div>
+          <button class="enter prepare-time" id="start" type="button">Entrar</button>
+        </div>
+
+        <div class="presets" aria-label="Duraciones rápidas">
+          <button type="button">5</button><button type="button">15</button><button class="selected" type="button">25</button><button type="button">45</button>
+        </div>
+        <div class="linked-note"><span>Vincular nota</span><span>＋</span></div>
+
+        <div class="stage" id="stage">ENFOQUE · 1 DE 4</div>
+        <div class="context" id="context">Después: descanso corto</div>
+        <div class="focus-note">Repasar Álgebra lineal</div>
+
+        <div class="controls">
+          <button class="round" id="reset" type="button" aria-label="Reiniciar">↺</button>
+          <button class="primary" id="pause" type="button">Pausar</button>
+          <button class="round" id="finish" type="button" aria-label="Terminar">■</button>
+        </div>
+
+        <section class="complete" aria-label="Enfoque completado">
+          <div class="seal">✓</div>
+          <span class="micro">LISTO</span>
+          <h3>Enfoque<br>completado</h3>
+          <p>Una cosa menos en tu cabeza.</p>
+          <button class="done" id="done" type="button">Hecho</button>
+        </section>
+
+        <div class="sheet-backdrop" id="sheetBackdrop"></div>
+        <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+          <div class="sheet-handle"></div>
+          <h3 id="sheetTitle">¿Terminar este enfoque?</h3>
+          <p>Esta sesión no sumará minutos.</p>
+          <button class="sheet-safe" id="keep" type="button">Seguir enfocándome</button>
+          <button class="sheet-danger" id="terminate" type="button">Terminar sesión</button>
+        </section>
+      </section>
+    </div>
+
+    <aside class="side">
+      <h2>Recorre el estado</h2>
+      <p>Usa estos controles de prototipo o interactúa directamente con el iPhone.</p>
+      <div class="steps" id="steps">
+        <button class="step current" type="button" data-go="prepare"><span>01</span><span>Preparar</span></button>
+        <button class="step" type="button" data-go="active"><span>02</span><span>Enfoque</span></button>
+        <button class="step" type="button" data-go="paused"><span>03</span><span>Pausa</span></button>
+        <button class="step" type="button" data-go="rest"><span>04</span><span>Descanso</span></button>
+        <button class="step" type="button" data-go="complete"><span>05</span><span>Cierre</span></button>
+      </div>
+      <p class="hint">También puedes usar ← y →. El prototipo respeta “Reducir movimiento”. No representa una implementación Flutter aprobada.</p>
+    </aside>
+  </main>
+
+  <script>
+    const phone = document.querySelector('#phone');
+    const stage = document.querySelector('#stage');
+    const context = document.querySelector('#context');
+    const pause = document.querySelector('#pause');
+    const states = ['prepare', 'active', 'paused', 'rest', 'complete'];
+
+    function setState(next) {
+      if (!states.includes(next)) return;
+      phone.classList.remove('sheet-open');
+      phone.dataset.state = next;
+      document.querySelectorAll('[data-go]').forEach((button) => button.classList.toggle('current', button.dataset.go === next));
+
+      if (next === 'active') {
+        stage.textContent = 'ENFOQUE · 1 DE 4';
+        context.textContent = 'Después: descanso corto';
+        pause.textContent = 'Pausar';
+      } else if (next === 'paused') {
+        stage.textContent = 'PAUSA · 1 DE 4';
+        context.textContent = 'Cuando estés listo';
+        pause.textContent = 'Continuar';
+      } else if (next === 'rest') {
+        stage.textContent = 'DESCANSO · 1 DE 4';
+        context.textContent = 'Después: enfoque 2';
+        pause.textContent = 'Pausar';
+      }
+    }
+
+    document.querySelectorAll('[data-go]').forEach((button) => button.addEventListener('click', () => setState(button.dataset.go)));
+    document.querySelector('#start').addEventListener('click', () => setState('active'));
+    pause.addEventListener('click', () => setState(phone.dataset.state === 'paused' ? 'active' : 'paused'));
+    document.querySelector('#finish').addEventListener('click', () => phone.classList.add('sheet-open'));
+    document.querySelector('#back').addEventListener('click', () => phone.dataset.state === 'prepare' ? null : phone.classList.add('sheet-open'));
+    document.querySelector('#keep').addEventListener('click', () => phone.classList.remove('sheet-open'));
+    document.querySelector('#sheetBackdrop').addEventListener('click', () => phone.classList.remove('sheet-open'));
+    document.querySelector('#terminate').addEventListener('click', () => setState('prepare'));
+    document.querySelector('#done').addEventListener('click', () => setState('prepare'));
+    document.querySelector('#reset').addEventListener('click', () => setState('active'));
+
+    document.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      const index = states.indexOf(phone.dataset.state);
+      const delta = event.key === 'ArrowRight' ? 1 : -1;
+      setState(states[Math.max(0, Math.min(states.length - 1, index + delta))]);
+    });
+  </script>
+</body>
+</html>

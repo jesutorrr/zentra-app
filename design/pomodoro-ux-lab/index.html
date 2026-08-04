@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Laboratorio local de propuestas UX para el temporizador Pomodoro de Zentra."
+    />
+    <title>Zentra Pomodoro UX Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">Z</span>
+          <div>
+            <span>Zentra</span>
+            <small>Pomodoro UX Lab</small>
+          </div>
+        </div>
+
+        <div class="sidebar-copy">
+          <p class="eyebrow">Cinco propuestas</p>
+          <h1>Dos modos, una decisión clara.</h1>
+          <p>
+            Compara cómo presentar Enfoque rápido y Ciclo Pomodoro antes de
+            modificar Flutter.
+          </p>
+        </div>
+
+        <nav id="variant-nav" class="variant-nav" aria-label="Propuestas UX"></nav>
+
+        <div class="sidebar-note">
+          <strong>Principio del prototipo</strong>
+          <p>Si el botón dice iniciar, el temporizador debe iniciar.</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">Prototipo interactivo</p>
+            <h2 id="proposal-title">Propuesta</h2>
+            <p id="proposal-subtitle" class="proposal-subtitle"></p>
+          </div>
+
+          <div class="viewport-switcher" aria-label="Vista del dispositivo">
+            <button class="viewport-button active" data-viewport="phone" type="button">
+              iPhone
+            </button>
+            <button class="viewport-button" data-viewport="tablet" type="button">
+              iPad
+            </button>
+          </div>
+        </header>
+
+        <section class="prototype-grid">
+          <div class="device-stage" id="device-stage">
+            <div class="device phone" id="device">
+              <div class="device-speaker" aria-hidden="true"></div>
+              <div class="device-screen" id="mockup" aria-live="polite"></div>
+              <div class="home-indicator" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <aside class="review-panel">
+            <div class="review-score">
+              <span id="proposal-score">0.0</span>
+              <small>claridad estimada</small>
+            </div>
+
+            <div class="review-section">
+              <p class="eyebrow">Lo mejor</p>
+              <ul id="proposal-strengths"></ul>
+            </div>
+
+            <div class="review-section">
+              <p class="eyebrow">Riesgo</p>
+              <p id="proposal-risk"></p>
+            </div>
+
+            <div class="review-section verdict">
+              <p class="eyebrow">Veredicto de Joy</p>
+              <p id="proposal-verdict"></p>
+            </div>
+
+            <button class="secondary-action full" id="reset-demo" type="button">
+              Reiniciar demostración
+            </button>
+          </aside>
+        </section>
+
+        <section class="comparison">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Comparación rápida</p>
+              <h2>No todas optimizan lo mismo</h2>
+            </div>
+            <p>
+              Claridad para alguien nuevo, velocidad para quien ya conoce
+              Pomodoro y espacio visual disponible.
+            </p>
+          </div>
+
+          <div class="comparison-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Propuesta</th>
+                  <th>Aprendizaje</th>
+                  <th>Velocidad</th>
+                  <th>Escala a iPad</th>
+                  <th>Mi lectura</th>
+                </tr>
+              </thead>
+              <tbody id="comparison-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="settings-dialog" class="settings-dialog">
+      <form method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Personalizar</p>
+            <h2>Tiempos del modo</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar" type="submit">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
+        <label class="duration-control">
+          <span>
+            <strong>Enfoque</strong>
+            <output id="focus-output">25 min</output>
+          </span>
+          <input id="focus-range" type="range" min="5" max="60" step="5" value="25" />
+        </label>
+
+        <div id="cycle-settings">
+          <label class="duration-control">
+            <span>
+              <strong>Descanso corto</strong>
+              <output id="short-output">5 min</output>
+            </span>
+            <input id="short-range" type="range" min="1" max="15" value="5" />
+          </label>
+
+          <label class="duration-control">
+            <span>
+              <strong>Descanso largo</strong>
+              <output id="long-output">15 min</output>
+            </span>
+            <input id="long-range" type="range" min="5" max="30" step="5" value="15" />
+          </label>
+
+          <label class="duration-control">
+            <span>
+              <strong>Sesiones de enfoque</strong>
+              <output id="cycles-output">4 sesiones</output>
+            </span>
+            <input id="cycles-range" type="range" min="2" max="8" value="4" />
+          </label>
+        </div>
+
+        <button class="primary-action full" id="save-settings" value="default" type="submit">
+          Guardar configuración
+        </button>
+      </form>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

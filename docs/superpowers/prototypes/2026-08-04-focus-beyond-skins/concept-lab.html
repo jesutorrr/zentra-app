@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zentra Focus · Prueba de silueta</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --paper: #f2f0ea;
+      --ink: #171918;
+      --muted: #9b9c98;
+      --line: rgba(255, 255, 255, .13);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0e0f0e;
+      color: #f4f2ec;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif;
+    }
+
+    main { width: min(1540px, calc(100% - 40px)); margin: 0 auto; padding: 54px 0 72px; }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: #aeb0ab;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    h1 { max-width: 840px; margin: 0; font-size: clamp(36px, 5vw, 72px); line-height: .98; letter-spacing: -.055em; }
+    .lead { max-width: 680px; margin: 22px 0 42px; color: #aeb0ab; font-size: 17px; line-height: 1.55; }
+
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 18px; align-items: start; }
+
+    article {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 16px;
+      background: #151615;
+      transition: border-color .3s ease, transform .3s ease;
+    }
+    article:hover { border-color: rgba(255, 255, 255, .35); transform: translateY(-3px); }
+
+    .meta { min-height: 118px; }
+    .number { color: #777a76; font-size: 11px; letter-spacing: .16em; }
+    h2 { margin: 8px 0 7px; font-size: 19px; letter-spacing: -.02em; }
+    .meta p { margin: 0; color: #979a95; font-size: 12px; line-height: 1.45; }
+
+    .phone {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 390 / 844;
+      overflow: hidden;
+      border-radius: 34px;
+      background: var(--paper);
+      color: var(--ink);
+      isolation: isolate;
+    }
+
+    .safe { position: absolute; inset: 22px 18px; }
+    .nav { display: flex; justify-content: space-between; font-size: 18px; }
+    .micro { font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+    .tiny { font-size: 10px; color: #6e716d; }
+    .time { font-variant-numeric: tabular-nums; letter-spacing: -.07em; }
+
+    .try {
+      width: 100%;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 12px;
+      background: transparent;
+      color: #dedfdc;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* 01 Portal: one object changes role and scale. */
+    .portal-copy { position: absolute; top: 68px; left: 22px; right: 18px; z-index: 2; }
+    .portal-copy strong { display: block; max-width: 180px; font-size: 23px; line-height: 1; letter-spacing: -.045em; }
+    .portal-copy span { display: block; margin-top: 9px; max-width: 180px; }
+    .portal-disc {
+      position: absolute;
+      left: 50%;
+      bottom: -42px;
+      width: 270px;
+      height: 270px;
+      translate: -50% 0;
+      border-radius: 50%;
+      background: #171918;
+      color: #f2f0ea;
+      transition: width .8s cubic-bezier(.2,.8,.2,1), height .8s cubic-bezier(.2,.8,.2,1), bottom .8s cubic-bezier(.2,.8,.2,1);
+    }
+    .portal-disc::before { content: ""; position: absolute; inset: 20px; border: 1px solid #f2f0ea; border-bottom-color: transparent; border-radius: 50%; rotate: -32deg; }
+    .portal-value { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .portal-value b { font-size: 54px; font-weight: 350; line-height: .9; }
+    .portal-value small { margin-top: 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+    .phone.demo .portal-disc { width: 580px; height: 580px; bottom: -76px; }
+
+    /* 02 Silence: progress exists, chrome is summoned. */
+    .silence { background: #171918; color: #f2f0ea; }
+    .silence .nav { opacity: .16; transition: opacity .35s ease; }
+    .silence-core { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .silence-core .time { font-size: 58px; font-weight: 240; }
+    .silence-dot { width: 6px; height: 6px; margin: 24px auto 0; border-radius: 50%; background: currentColor; opacity: .5; }
+    .silence-controls { position: absolute; left: 28px; right: 28px; bottom: 30px; display: flex; justify-content: space-between; opacity: 0; translate: 0 10px; transition: .35s ease; }
+    .silence.demo .nav, .silence.demo .silence-controls { opacity: 1; translate: 0 0; }
+
+    /* 03 Route: the cycle is the primary spatial model. */
+    .route-title { position: absolute; top: 64px; left: 22px; right: 18px; }
+    .route-title b { display: block; font-size: 24px; line-height: 1.02; letter-spacing: -.04em; }
+    .path { position: absolute; top: 150px; bottom: 72px; left: 52%; width: 1px; background: #a8aaa5; }
+    .node { position: absolute; left: 52%; width: 38px; height: 38px; translate: -50% -50%; display: grid; place-items: center; border: 1px solid #555853; border-radius: 50%; background: var(--paper); font-size: 12px; transition: .35s ease; }
+    .node:nth-child(1) { top: 195px; }
+    .node:nth-child(2) { top: 305px; }
+    .node:nth-child(3) { top: 415px; }
+    .node:nth-child(4) { top: 525px; }
+    .node.active { width: 96px; height: 96px; background: #171918; color: #f2f0ea; font-size: 32px; }
+    .route.demo .node.active { top: 305px; }
+
+    /* 04 Typographic: no ring, the remaining time is the surface. */
+    .typefield { background: #efede7; }
+    .type-stage { position: absolute; left: 20px; top: 90px; writing-mode: vertical-rl; rotate: 180deg; }
+    .type-time { position: absolute; left: -14px; top: 206px; font-size: 76px; font-weight: 260; line-height: .82; }
+    .type-time span { display: block; }
+    .type-horizon { position: absolute; left: 20px; right: 20px; bottom: 112px; height: 1px; background: #1e201f; transition: height .45s ease, bottom .45s ease; }
+    .type-caption { position: absolute; left: 22px; bottom: 72px; font-size: 11px; }
+    .typefield.demo .type-horizon { height: 22px; bottom: 90px; }
+    .typefield.demo .type-time span:last-child { translate: 18px 0; }
+
+    /* 05 Living interval: progress is a quiet morphing body. */
+    .living-copy { position: absolute; top: 68px; left: 22px; }
+    .living-copy b { display: block; font-size: 23px; letter-spacing: -.04em; }
+    .organism {
+      position: absolute;
+      left: 50%;
+      top: 48%;
+      width: 222px;
+      height: 260px;
+      translate: -50% -50%;
+      display: grid;
+      place-content: center;
+      border: 1.5px solid #1d1f1e;
+      border-radius: 48% 52% 45% 55% / 58% 44% 56% 42%;
+      background: #dcdbd5;
+      text-align: center;
+      transition: border-radius .8s ease, width .8s ease, height .8s ease, background .8s ease;
+    }
+    .organism .time { font-size: 45px; font-weight: 300; }
+    .organism small { margin-top: 9px; }
+    .living.demo .organism { width: 250px; height: 224px; border-radius: 60% 40% 57% 43% / 38% 60% 40% 62%; background: #c8c8c2; }
+    .living-action { position: absolute; left: 22px; right: 22px; bottom: 32px; display: flex; justify-content: center; gap: 32px; font-size: 14px; }
+
+    .verdict { margin-top: 34px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 22px; color: #b6b8b3; line-height: 1.55; }
+    .verdict strong { color: #f4f2ec; }
+
+    @media (max-width: 1120px) { .grid { grid-template-columns: repeat(2, minmax(230px, 1fr)); } }
+    @media (max-width: 620px) { main { width: min(100% - 24px, 420px); padding-top: 34px; } .grid { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Zentra Focus · prueba de silueta</p>
+    <h1>Cinco ideas.<br>Cero skins.</h1>
+    <p class="lead">Todas están deliberadamente en monocromo. Si sobreviven sin paleta, tipografía ornamental ni efectos, entonces la diferencia pertenece a la experiencia.</p>
+
+    <section class="grid" aria-label="Cinco modelos de interacción">
+      <article>
+        <div class="meta"><span class="number">01 / OBJETO</span><h2>El Portal</h2><p>Un círculo sirve para elegir, entrar, medir, pausar y cerrar.</p></div>
+        <div class="phone portal" data-model="portal">
+          <div class="safe nav"><span>←</span><span>◷</span></div>
+          <div class="portal-copy"><strong>Haz espacio para una sola cosa</strong><span class="tiny">El tiempo se convierte en un lugar.</span></div>
+          <div class="portal-disc"><div class="portal-value"><b>25</b><small>Entrar</small></div></div>
+        </div>
+        <button class="try" type="button">Probar gesto · expandir</button>
+      </article>
+
+      <article>
+        <div class="meta"><span class="number">02 / AUSENCIA</span><h2>Silencio</h2><p>El producto se retira. Un toque convoca los controles.</p></div>
+        <div class="phone silence" data-model="silence">
+          <div class="safe nav"><span>×</span><span>···</span></div>
+          <div class="silence-core"><span class="micro">1 de 4</span><span class="time">24:58</span><span class="silence-dot"></span></div>
+          <div class="silence-controls"><span>↺</span><span>Ⅱ</span><span>■</span></div>
+        </div>
+        <button class="try" type="button">Probar gesto · revelar</button>
+      </article>
+
+      <article>
+        <div class="meta"><span class="number">03 / TRAYECTO</span><h2>El Recorrido</h2><p>El ciclo completo es un camino, no cuatro timers separados.</p></div>
+        <div class="phone route" data-model="route">
+          <div class="safe nav"><span>←</span><span>◷</span></div>
+          <div class="route-title"><span class="micro">Ciclo</span><b>Cuatro estaciones.<br>Una sola intención.</b></div>
+          <div class="path"></div>
+          <span class="node active">1</span><span class="node">2</span><span class="node">3</span><span class="node">4</span>
+        </div>
+        <button class="try" type="button">Probar gesto · avanzar</button>
+      </article>
+
+      <article>
+        <div class="meta"><span class="number">04 / LENGUAJE</span><h2>Tiempo tipográfico</h2><p>Sin aro. La escala, el peso y el espacio muestran el estado.</p></div>
+        <div class="phone typefield" data-model="typefield">
+          <div class="safe nav"><span>←</span><span>◷</span></div>
+          <span class="type-stage micro">Enfoque · 1 de 4</span>
+          <div class="type-time time"><span>24</span><span>58</span></div>
+          <span class="type-horizon"></span><span class="type-caption">Después: descanso corto</span>
+        </div>
+        <button class="try" type="button">Probar gesto · pausar</button>
+      </article>
+
+      <article>
+        <div class="meta"><span class="number">05 / CUERPO</span><h2>Intervalo vivo</h2><p>El tiempo es una forma que se tensa, descansa y respira.</p></div>
+        <div class="phone living" data-model="living">
+          <div class="safe nav"><span>←</span><span>◷</span></div>
+          <div class="living-copy"><span class="micro">Enfoque</span><b>Una cosa a la vez</b></div>
+          <div class="organism"><span class="time">24:58</span><small class="tiny">forma en tensión</small></div>
+          <div class="living-action"><span>↺</span><span>Ⅱ</span><span>■</span></div>
+        </div>
+        <button class="try" type="button">Probar gesto · respirar</button>
+      </article>
+    </section>
+
+    <p class="verdict"><strong>Prueba superada:</strong> al cubrir títulos, paletas y microcopy, las cinco composiciones siguen teniendo siluetas y gestos distintos. El concepto elegido para alta fidelidad es <strong>El Portal + Silencio</strong>: un objeto continuo que absorbe la interfaz cuando empieza el enfoque.</p>
+  </main>
+
+  <script>
+    document.querySelectorAll('.try').forEach((button) => {
+      button.addEventListener('click', () => button.previousElementSibling.classList.toggle('demo'));
+    });
+  </script>
+</body>
+</html>

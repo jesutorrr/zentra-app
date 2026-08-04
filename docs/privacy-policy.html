@@ -104,51 +104,73 @@
     <div class="container">
         <div class="header">
             <h1>Política de Privacidad</h1>
-            <p class="subtitle">Zentra - Hábitos Simples</p>
-            <p class="subtitle">Última actualización: 8 de diciembre de 2025</p>
+            <p class="subtitle">Zentra</p>
+            <p class="subtitle">Última actualización: 3 de agosto de 2026</p>
         </div>
 
         <div class="summary">
-            <p><strong>Resumen:</strong> Zentra respeta tu privacidad. No recopilamos, almacenamos ni compartimos ningún dato personal. Toda la información de la aplicación se guarda únicamente en tu dispositivo.</p>
+            <p><strong>Resumen:</strong> La versión vigente de Zentra funciona de forma local y guarda tus datos en el dispositivo. El acceso con Google y la sincronización con Supabase están desactivados. Zentra no integra publicidad, rastreo entre aplicaciones ni analítica de terceros.</p>
         </div>
 
-        <h2>1. Información que no recopilamos</h2>
-        <p>Zentra no recopila ningún tipo de información personal. Específicamente:</p>
+        <h2>1. Opciones de uso</h2>
+        <p>Puedes utilizar todas las funciones principales de Zentra de forma local, sin crear una cuenta en línea. La pantalla de acceso permite crear un espacio en este dispositivo o restaurar un respaldo.</p>
+        <p>El acceso con Google, la vinculación y la sincronización en la nube no están disponibles en la versión vigente.</p>
+
+        <h2>2. Datos procesados en el dispositivo</h2>
+        <p>Según las funciones que utilices, Zentra puede guardar localmente:</p>
         <ul>
-            <li>No recopilamos datos personales identificables</li>
-            <li>No recopilamos información de uso o analíticas</li>
-            <li>No recopilamos datos de ubicación</li>
-            <li>No utilizamos cookies ni tecnologías de rastreo</li>
-            <li>No compartimos información con terceros</li>
+            <li>Nombre visible, avatar y preferencias del espacio.</li>
+            <li>Hábitos, horarios, completados, notas, tareas y progreso.</li>
+            <li>Sesiones de enfoque terminadas y estado temporal de una sesión activa.</li>
+            <li>Preferencias de apariencia, notificaciones, sonidos y temporizador.</li>
         </ul>
+        <p>Zentra ya no crea ni conserva contraseñas para espacios locales. La protección del espacio local depende del código de acceso, Face ID, Touch ID y las medidas de seguridad del dispositivo.</p>
 
-        <h2>2. Almacenamiento de datos</h2>
-        <p>Todos los datos generados por el uso de la aplicación, incluyendo hábitos, configuraciones y registros de progreso, se almacenan <strong>exclusivamente de forma local en tu dispositivo</strong>.</p>
-        <p>Zentra no cuenta con servidores externos ni bases de datos en la nube. Si desinstala la aplicación, todos los datos asociados se eliminarán permanentemente de su dispositivo.</p>
+        <h2>3. Integración en la nube desactivada</h2>
+        <p>La versión vigente no inicia sesión con Google, no inicializa Supabase y no envía cambios nuevos para sincronización. Si vinculaste una versión anterior, Zentra conserva la copia local con el mismo identificador del espacio para no perder tu información.</p>
+        <p>Desactivar la integración en la aplicación no elimina automáticamente información que una versión anterior haya enviado a Google o Supabase. Esa información puede permanecer sujeta a las políticas de conservación de esos proveedores. Puedes usar el contacto al final de esta política para solicitar ayuda con datos remotos anteriores.</p>
 
-        <h2>3. Permisos de la aplicación</h2>
+        <h2>4. Respaldos</h2>
+        <p>Cuando exportas un respaldo, Zentra cifra su contenido con AES-256-GCM y una clave derivada de la contraseña que eliges. Zentra no guarda esa contraseña y no puede recuperarla. El archivo se crea en tu dispositivo y tú decides dónde guardarlo o compartirlo.</p>
+        <p>Para no dejar datos existentes atrapados, la aplicación puede importar respaldos antiguos sin cifrar. Trátalos como información sensible y elimínalos de ubicaciones inseguras después de migrarlos.</p>
+
+        <h2>5. Permisos de la aplicación</h2>
         <p>Zentra puede solicitar los siguientes permisos del sistema:</p>
         <ul>
-            <li><strong>Notificaciones:</strong> Utilizadas para enviar recordatorios de hábitos y alertas del temporizador Pomodoro. Este permiso es opcional y puede desactivarse en cualquier momento desde la configuración del dispositivo.</li>
+            <li><strong>Notificaciones:</strong> Para recordatorios y alertas del temporizador. Zentra usa contenido genérico por defecto para reducir la exposición de nombres creados por ti en la pantalla bloqueada. Puedes elegir otro nivel de privacidad para cada recordatorio de nota.</li>
+            <li><strong>Actividades en vivo:</strong> En dispositivos compatibles, muestra el estado del temporizador en la pantalla bloqueada y Dynamic Island.</li>
+            <li><strong>Selector de archivos:</strong> Se abre únicamente cuando eliges importar un respaldo. El archivo seleccionado se procesa en tu dispositivo y no se carga a un servidor.</li>
+            <li><strong>Fotos:</strong> Sólo cuando eliges desde Zentra un archivo compatible para restaurar datos.</li>
         </ul>
 
-        <h2>4. Servicios de terceros</h2>
-        <p>Zentra no integra servicios de análisis, publicidad ni ningún otro servicio de terceros que recopile información del usuario.</p>
+        <h2>6. Servicios de terceros</h2>
+        <ul>
+            <li><strong>Google:</strong> Integración de autenticación desactivada en la versión vigente. Puede conservar información autorizada en versiones anteriores.</li>
+            <li><strong>Supabase:</strong> Integración desactivada en la versión vigente. Puede conservar cuentas o datos sincronizados por versiones anteriores.</li>
+            <li><strong>Apple y el sistema operativo:</strong> Notificaciones, actividades en vivo, selector de archivos y almacenamiento local protegido.</li>
+        </ul>
+        <p>Zentra no vende datos personales y no integra SDK de publicidad, rastreo entre aplicaciones o analítica de terceros.</p>
 
-        <h2>5. Seguridad</h2>
-        <p>Al almacenar todos los datos localmente en su dispositivo, la seguridad de su información depende de las medidas de seguridad de su propio dispositivo (código de acceso, Face ID, Touch ID, etc.).</p>
+        <h2>7. Seguridad</h2>
+        <p>Los respaldos nuevos se cifran y autentican antes de guardarse. Los registros de diagnóstico redactan identificadores comunes y no están disponibles desde Ajustes en compilaciones públicas. Los datos locales dependen del sandbox y las medidas de protección del dispositivo.</p>
+        <p>Ningún sistema es completamente seguro. Mantén actualizado el dispositivo, usa un código de acceso y no compartas contraseñas de respaldo ni archivos antiguos sin cifrar.</p>
 
-        <h2>6. Cambios en esta política</h2>
-        <p>Nos reservamos el derecho de actualizar esta política de privacidad en cualquier momento. Cualquier cambio será reflejado en esta página con una nueva fecha de "Última actualización".</p>
+        <h2>8. Conservación y eliminación</h2>
+        <p>Un espacio local permanece en tu dispositivo hasta que eliges Configuración &gt; Eliminar espacio de este dispositivo o borras la aplicación.</p>
+        <p>Esta acción elimina únicamente la copia local. Durante la pausa de la integración no elimina una identidad o datos remotos creados por una versión anterior. Para solicitar ayuda con esos datos, utiliza el contacto de esta página.</p>
+        <p>Los respaldos que hayas guardado fuera de Zentra no se eliminan automáticamente.</p>
+
+        <h2>9. Cambios en esta política</h2>
+        <p>Podemos actualizar esta política cuando cambien las funciones o proveedores. La fecha de la versión vigente aparece al inicio de esta página.</p>
 
         <div class="contact">
             <h2>Contacto</h2>
-            <p>Si tiene preguntas o inquietudes sobre esta política de privacidad, puede contactarnos en:</p>
+            <p>Si tienes preguntas sobre privacidad o eliminación de datos, contáctanos en:</p>
             <p><a href="mailto:unbobosaurio@gmail.com">unbobosaurio@gmail.com</a></p>
         </div>
 
         <div class="footer">
-            <p>© 2025 Zentra. Todos los derechos reservados.</p>
+            <p>© 2026 Zentra. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

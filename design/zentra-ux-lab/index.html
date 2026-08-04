@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Laboratorio interactivo de Calma precisa y las cinco direcciones UX de Zentra."
+    />
+    <title>Zentra UX Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="lab-shell">
+      <aside class="lab-sidebar">
+        <a class="brand" href="#top" aria-label="Zentra UX Lab">
+          <span class="brand-mark">Z</span>
+          <span>
+            <strong>Zentra</strong>
+            <small>UX Lab</small>
+          </span>
+        </a>
+
+        <div class="sidebar-intro">
+          <p class="eyebrow">Calma precisa · evolución 3.2</p>
+          <h1>Cinco maneras de sentir una misma Zentra.</h1>
+          <p>
+            Noventa vistas para comparar cinco modelos de producto, Notas
+            activas y las superficies del sistema antes de mover la app real.
+          </p>
+        </div>
+
+        <nav
+          id="concept-nav"
+          class="concept-nav"
+          aria-label="Direcciones de diseño"
+        ></nav>
+
+        <div class="sidebar-note">
+          <span class="note-line"></span>
+          <p>
+            Regla de esta iteración: menos pasos, más personalidad y una
+            recompensa visible sin convertir Zentra en un casino.
+          </p>
+        </div>
+      </aside>
+
+      <main class="lab-main" id="top">
+        <header class="lab-header">
+          <div>
+            <p class="eyebrow">Dirección activa</p>
+            <h2 id="concept-title"></h2>
+            <p id="concept-tagline" class="concept-tagline"></p>
+          </div>
+          <div class="viewport-switcher" aria-label="Tamaño de dispositivo">
+            <button class="viewport-button active" data-viewport="phone" type="button" aria-pressed="true" aria-current="true">
+              iPhone
+            </button>
+            <button class="viewport-button" data-viewport="tablet" type="button" aria-pressed="false">
+              iPad
+            </button>
+          </div>
+        </header>
+
+        <section class="screen-browser" aria-labelledby="screen-browser-title">
+          <div class="section-title-row">
+            <div>
+              <p class="eyebrow">Recorrido completo</p>
+              <h3 id="screen-browser-title">Pantalla por pantalla</h3>
+            </div>
+            <p>
+              <span id="screen-count">01</span> de
+              <span id="screen-total">18</span>
+            </p>
+          </div>
+          <nav
+            id="screen-nav"
+            class="screen-nav"
+            aria-label="Pantallas de Zentra"
+          ></nav>
+        </section>
+
+        <section class="studio-grid">
+          <div class="device-stage">
+            <div class="ambient ambient-one"></div>
+            <div class="ambient ambient-two"></div>
+            <div class="device phone" id="device">
+              <div class="device-camera" aria-hidden="true"></div>
+              <div id="mockup" class="device-screen"></div>
+              <div class="home-indicator" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <aside class="decision-panel">
+            <div class="score-card">
+              <span id="concept-score"></span>
+              <div>
+                <strong>coherencia estimada</strong>
+                <small>No es una métrica de usuarios todavía</small>
+              </div>
+            </div>
+
+            <div class="decision-section">
+              <p class="eyebrow">Tesis visual</p>
+              <p id="concept-thesis"></p>
+            </div>
+
+            <div class="decision-section">
+              <p class="eyebrow">Paleta</p>
+              <div id="palette" class="palette"></div>
+            </div>
+
+            <div class="decision-section">
+              <p class="eyebrow">Reglas del sistema</p>
+              <ul id="concept-principles"></ul>
+            </div>
+
+            <div class="decision-section evolution-section">
+              <p class="eyebrow">Evolución seleccionada</p>
+              <h3 id="concept-evolution-title"></h3>
+              <p id="concept-evolution-copy"></p>
+            </div>
+
+            <div class="decision-section screen-decision">
+              <p class="eyebrow">Por qué esta pantalla</p>
+              <h3 id="screen-decision-title"></h3>
+              <p id="screen-decision-copy"></p>
+            </div>
+
+            <div class="decision-section tradeoff">
+              <p class="eyebrow">Tradeoff honesto</p>
+              <p id="concept-tradeoff"></p>
+            </div>
+          </aside>
+        </section>
+
+        <section class="journey-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Mapa de experiencia</p>
+              <h2>La propuesta debe sobrevivir todo el viaje.</h2>
+            </div>
+            <p>
+              El viaje ya incluye Notas activas, el foco en curso y la presencia
+              de Zentra fuera de la app. Cada miniatura abre su estado real.
+            </p>
+          </div>
+          <div id="journey-grid" class="journey-grid"></div>
+        </section>
+
+        <section class="comparison-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Lectura de Joy</p>
+              <h2>Elijamos comportamiento, no una combinación de colores.</h2>
+            </div>
+            <p>
+              Calma precisa es el universo compartido. Guía diaria, Agenda viva,
+              Progreso vivo, Compañera Zentra y Estudio modular organizan la
+              experiencia de formas realmente distintas.
+            </p>
+          </div>
+          <div class="comparison-grid" id="comparison-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="dial-layer" id="dial-layer" hidden>
+      <button
+        class="dial-backdrop"
+        data-action="close-dial"
+        type="button"
+        aria-label="Cerrar selector"
+      ></button>
+      <section class="dial-sheet" role="dialog" aria-modal="true" aria-labelledby="dial-title">
+        <div class="dial-sheet-header">
+          <div>
+            <p class="eyebrow">Duración personalizada</p>
+            <h2 id="dial-title">Tiempo de enfoque</h2>
+            <p>Gira el dial. El límite por sesión es 60 minutos.</p>
+          </div>
+          <button class="icon-button" data-action="close-dial" type="button" aria-label="Cerrar">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <div class="rotary-wrap">
+          <div class="rotary-dial" id="rotary-dial">
+            <span class="dial-pointer"></span>
+            <span id="dial-value" class="dial-value">25</span>
+            <small>minutos</small>
+          </div>
+        </div>
+        <label class="range-label">
+          <span>5 min</span>
+          <input id="minute-range" type="range" min="5" max="60" value="25" />
+          <span>60 min</span>
+        </label>
+        <button class="primary-button full" data-action="apply-dial" type="button">
+          Usar <span id="dial-action-value">25</span> minutos
+        </button>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

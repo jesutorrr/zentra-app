@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1000" viewBox="0 0 1800 1000">
+  <rect width="1800" height="1000" fill="#0e0f0e"/>
+  <text x="72" y="74" fill="#92958f" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" letter-spacing="4">ZENTRA FOCUS · PRUEBA DE SILUETA</text>
+  <text x="72" y="146" fill="#f4f2ec" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="62" font-weight="700" letter-spacing="-3">Cinco ideas. Cero skins.</text>
+  <text x="72" y="188" fill="#8f928d" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20">Sin color ni efectos, el modelo mental todavía debe reconocerse.</text>
+
+  <!-- 01 Portal -->
+  <g transform="translate(72 250)">
+    <text x="0" y="-28" fill="#f4f2ec" font-family="sans-serif" font-size="23" font-weight="700">01 · El Portal</text>
+    <rect width="292" height="630" rx="34" fill="#f2f0ea"/>
+    <text x="24" y="62" fill="#171918" font-family="sans-serif" font-size="25" font-weight="700">Haz espacio para</text>
+    <text x="24" y="91" fill="#171918" font-family="sans-serif" font-size="25" font-weight="700">una sola cosa</text>
+    <circle cx="146" cy="493" r="134" fill="#171918"/>
+    <path d="M70 532 A104 104 0 1 1 224 532" fill="none" stroke="#f2f0ea" stroke-width="2"/>
+    <text x="146" y="500" text-anchor="middle" fill="#f2f0ea" font-family="sans-serif" font-size="62" font-weight="300">25</text>
+    <text x="146" y="532" text-anchor="middle" fill="#f2f0ea" font-family="sans-serif" font-size="12" letter-spacing="3">ENTRAR</text>
+    <text x="146" y="676" text-anchor="middle" fill="#8f928d" font-family="sans-serif" font-size="15">El objeto se expande</text>
+  </g>
+
+  <!-- 02 Silence -->
+  <g transform="translate(416 250)">
+    <text x="0" y="-28" fill="#f4f2ec" font-family="sans-serif" font-size="23" font-weight="700">02 · Silencio</text>
+    <rect width="292" height="630" rx="34" fill="#171918" stroke="#343633"/>
+    <text x="146" y="284" text-anchor="middle" fill="#f2f0ea" font-family="sans-serif" font-size="12" font-weight="700" letter-spacing="3">1 DE 4</text>
+    <text x="146" y="364" text-anchor="middle" fill="#f2f0ea" font-family="sans-serif" font-size="58" font-weight="250">24:58</text>
+    <circle cx="146" cy="402" r="4" fill="#777a76"/>
+    <text x="146" y="676" text-anchor="middle" fill="#8f928d" font-family="sans-serif" font-size="15">Un toque convoca la UI</text>
+  </g>
+
+  <!-- 03 Route -->
+  <g transform="translate(760 250)">
+    <text x="0" y="-28" fill="#f4f2ec" font-family="sans-serif" font-size="23" font-weight="700">03 · El Recorrido</text>
+    <rect width="292" height="630" rx="34" fill="#f2f0ea"/>
+    <text x="24" y="62" fill="#171918" font-family="sans-serif" font-size="13" font-weight="700" letter-spacing="3">CICLO</text>
+    <text x="24" y="99" fill="#171918" font-family="sans-serif" font-size="24" font-weight="700">Cuatro estaciones.</text>
+    <line x1="146" y1="158" x2="146" y2="550" stroke="#8d908b"/>
+    <circle cx="146" cy="222" r="52" fill="#171918"/>
+    <text x="146" y="235" text-anchor="middle" fill="#f2f0ea" font-family="sans-serif" font-size="38">1</text>
+    <circle cx="146" cy="344" r="23" fill="#f2f0ea" stroke="#171918"/><text x="146" y="350" text-anchor="middle" font-family="sans-serif" font-size="17">2</text>
+    <circle cx="146" cy="444" r="23" fill="#f2f0ea" stroke="#171918"/><text x="146" y="450" text-anchor="middle" font-family="sans-serif" font-size="17">3</text>
+    <circle cx="146" cy="544" r="23" fill="#f2f0ea" stroke="#171918"/><text x="146" y="550" text-anchor="middle" font-family="sans-serif" font-size="17">4</text>
+    <text x="146" y="676" text-anchor="middle" fill="#8f928d" font-family="sans-serif" font-size="15">La sesión avanza</text>
+  </g>
+
+  <!-- 04 Type -->
+  <g transform="translate(1104 250)">
+    <text x="0" y="-28" fill="#f4f2ec" font-family="sans-serif" font-size="23" font-weight="700">04 · Tiempo tipográfico</text>
+    <rect width="292" height="630" rx="34" fill="#efede7"/>
+    <text x="30" y="89" fill="#171918" font-family="sans-serif" font-size="11" font-weight="700" letter-spacing="3">ENFOQUE · 1 DE 4</text>
+    <text x="-4" y="318" fill="#171918" font-family="sans-serif" font-size="122" font-weight="250" letter-spacing="-10">24</text>
+    <text x="42" y="432" fill="#171918" font-family="sans-serif" font-size="122" font-weight="250" letter-spacing="-10">58</text>
+    <rect x="24" y="524" width="244" height="2" fill="#171918"/>
+    <text x="24" y="558" fill="#646762" font-family="sans-serif" font-size="14">Después: descanso corto</text>
+    <text x="146" y="676" text-anchor="middle" fill="#8f928d" font-family="sans-serif" font-size="15">El lenguaje es el progreso</text>
+  </g>
+
+  <!-- 05 Living -->
+  <g transform="translate(1448 250)">
+    <text x="0" y="-28" fill="#f4f2ec" font-family="sans-serif" font-size="23" font-weight="700">05 · Intervalo vivo</text>
+    <rect width="292" height="630" rx="34" fill="#f2f0ea"/>
+    <text x="24" y="65" fill="#171918" font-family="sans-serif" font-size="12" font-weight="700" letter-spacing="3">ENFOQUE</text>
+    <text x="24" y="100" fill="#171918" font-family="sans-serif" font-size="24" font-weight="700">Una cosa a la vez</text>
+    <path d="M65 226 C82 160 191 137 235 205 C273 264 247 401 180 449 C112 497 49 417 54 340 C57 294 54 268 65 226Z" fill="#d8d7d1" stroke="#171918" stroke-width="2"/>
+    <text x="146" y="334" text-anchor="middle" fill="#171918" font-family="sans-serif" font-size="51" font-weight="300">24:58</text>
+    <text x="146" y="366" text-anchor="middle" fill="#646762" font-family="sans-serif" font-size="12">forma en tensión</text>
+    <text x="146" y="676" text-anchor="middle" fill="#8f928d" font-family="sans-serif" font-size="15">El tiempo tiene cuerpo</text>
+  </g>
+</svg>
