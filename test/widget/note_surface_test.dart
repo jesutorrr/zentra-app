@@ -6,6 +6,9 @@ import 'package:zentra/presentation/note_surface.dart';
 
 import '../support/owner_bound_widget_harness.dart';
 
+/// The zero width space the block editor keeps in front of the active field.
+const String _sentinel = '\u200B';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -209,6 +212,66 @@ void main() {
       find.byKey(const ValueKey('note-raw-field')),
     );
     expect(raw.controller!.text, body);
+  });
+
+  // Negritas used to collapse the selection, so turning the bold back off
+  // meant finding the word and selecting it again by hand. Nobody does that,
+  // which left the un-bold half of the toggle out of reach.
+  testWidgets('Negritas keeps the word selected so a second tap undoes it',
+      (tester) async {
+    final harness = await createHarness(noteBody: 'hola mundo');
+    await tester.pumpWidget(
+      buildApp(harness, NoteSurface(noteId: harness.algebraId)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('note-block-0')));
+    await tester.pumpAndSettle();
+
+    TextEditingController fieldOf() => tester
+        .widget<TextField>(
+          find.descendant(
+            of: find.byKey(const ValueKey('note-active-block')),
+            matching: find.byType(TextField),
+          ),
+        )
+        .controller!;
+
+    String selectedText() {
+      final field = fieldOf();
+      return field.text.substring(
+        field.selection.start,
+        field.selection.end,
+      );
+    }
+
+    // A double tap on `mundo`, over the sentinel the editor keeps in front of
+    // the block source.
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '${_sentinel}hola mundo',
+        selection: TextSelection(baseOffset: 6, extentOffset: 11),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(selectedText(), 'mundo');
+
+    final bold = find.byKey(const ValueKey('note-format-bold'));
+    expect(tester.widget<IconButton>(bold).onPressed, isNotNull);
+    await tester.tap(bold);
+    await tester.pumpAndSettle();
+
+    expect(fieldOf().text, '${_sentinel}hola **mundo**');
+    expect(selectedText(), 'mundo');
+
+    // Which is what makes the second tap reachable at all.
+    expect(tester.widget<IconButton>(bold).onPressed, isNotNull);
+    await tester.tap(bold);
+    await tester.pumpAndSettle();
+
+    expect(fieldOf().text, '${_sentinel}hola mundo');
+    expect(selectedText(), 'mundo');
+    expect(harness.noteById(harness.algebraId).body, 'hola mundo');
   });
 
   testWidgets('offers the first H1 as the title only once', (tester) async {

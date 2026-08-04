@@ -653,17 +653,20 @@ class _NoteSurfaceState extends ConsumerState<NoteSurface> {
     final caret = _caret;
     final selection = _editorController.sourceSelection;
     if (caret == null || selection == null || selection.isCollapsed) return;
-    final edit = wrapSelection(
+    final wrap = wrapSelection(
       _document,
       caret.blockIndex,
       selection.start,
       selection.end,
       style,
     );
-    _onDocumentChanged(edit.document);
-    _editorController.focusBlock(
-      edit.caret.blockIndex,
-      offset: edit.caret.offset,
+    _onDocumentChanged(wrap.document);
+    // The wrapped content stays selected, so the same button toggles the style
+    // back off without the user having to find the word again.
+    _editorController.focusBlockSelection(
+      wrap.selection.blockIndex,
+      start: wrap.selection.start,
+      end: wrap.selection.end,
     );
   }
 

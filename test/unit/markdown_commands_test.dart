@@ -41,6 +41,15 @@ const _corpus = <String>[
   '```dart\nlinea uno\nlinea dos\n```',
 ];
 
+/// The marker each style is written with, mirrored from the domain so the
+/// round trip below can reason about the characters around a wrap.
+const _markers = <MarkdownInlineStyle, String>{
+  MarkdownInlineStyle.bold: '**',
+  MarkdownInlineStyle.italic: '*',
+  MarkdownInlineStyle.code: '`',
+  MarkdownInlineStyle.strikethrough: '~~',
+};
+
 String cycle(String source, NoteBlockCommand command) =>
     applyBlockCommand(MarkdownDocument.parse(source), _caret, command)
         .document
@@ -84,6 +93,44 @@ bool caretIsInside(DocumentEdit edit) {
   }
   final line = edit.document.blocks[edit.caret.blockIndex].toSourceLine();
   return edit.caret.offset >= 0 && edit.caret.offset <= line.length;
+}
+
+bool rangeIsInside(DocumentWrap wrap) {
+  final range = wrap.selection;
+  if (range.blockIndex < 0 || range.blockIndex >= wrap.document.blocks.length) {
+    return false;
+  }
+  final line = wrap.document.blocks[range.blockIndex].toSourceLine();
+  return range.start >= 0 &&
+      range.start <= range.end &&
+      range.end <= line.length;
+}
+
+/// The text [wrap] left selected, which is what a second tap on the same
+/// button will act on.
+String selectedTextOf(DocumentWrap wrap) =>
+    wrap.document.blocks[wrap.selection.blockIndex]
+        .toSourceLine()
+        .substring(wrap.selection.start, wrap.selection.end);
+
+/// Whether handing [wrap]'s range back to the same style undoes it.
+///
+/// Two shapes are not undone, and both are deliberate. A run of the marker
+/// character right outside the pair hides that pair from the run check, which
+/// is what stops a single `*` from stealing half of the `**` that makes a word
+/// bold. And content that is itself a complete span of the same style is read
+/// as a selection that swallowed its own markers, so the second tap strips
+/// those rather than adding another pair around them.
+bool togglesBackOff(DocumentWrap wrap, String marker) {
+  final line = wrap.document.blocks[wrap.selection.blockIndex].toSourceLine();
+  final left = wrap.selection.start - marker.length - 1;
+  final right = wrap.selection.end + marker.length;
+  if (left >= 0 && line[left] == marker[0]) return false;
+  if (right < line.length && line[right] == marker[0]) return false;
+  final content = selectedTextOf(wrap);
+  return content.length <= marker.length * 2 ||
+      !content.startsWith(marker) ||
+      !content.endsWith(marker);
 }
 
 void main() {
@@ -469,7 +516,12 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(edit.document.serialize(), 'hola mundo');
-    expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 10));
+    // Narrower than what came in: the markers the selection swallowed are
+    // gone, and only the word they were holding is left to toggle again.
+    expect(
+      edit.selection,
+      const DocumentRange(blockIndex: 0, start: 5, end: 10),
+    );
   });
 
   test('an empty selection leaves the document untouched', () {
@@ -481,7 +533,10 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(edit.document.serialize(), 'hola');
-    expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 2));
+    expect(
+      edit.selection,
+      const DocumentRange(blockIndex: 0, start: 2, end: 2),
+    );
   });
 
   test('the selection is clamped to the text the block owns', () {
@@ -493,8 +548,11 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(wide.document.serialize(), '**hola**');
-    // The caret trails the wrapped content, not the closing marker.
-    expect(wide.caret, const DocumentCaret(blockIndex: 0, offset: 6));
+    // The range covers the wrapped content, not the markers around it.
+    expect(
+      wide.selection,
+      const DocumentRange(blockIndex: 0, start: 2, end: 6),
+    );
 
     // Swallowing the `# ` would demote the heading to a paragraph.
     final heading = wrapSelection(
@@ -524,7 +582,7 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(backward.document.serialize(), forward.document.serialize());
-    expect(backward.caret, forward.caret);
+    expect(backward.selection, forward.selection);
   });
 
   test('wrapping in italics reads back as italics inside a word', () {
@@ -573,6 +631,31 @@ void main() {
     );
   });
 
+  // What stays selected is what the next tap acts on. Leaving a marker inside
+  // the range would make that tap read the pair as one the user swallowed and
+  // strip it, and leaving the range collapsed would take the word away from
+  // the user entirely.
+  test('the range a wrap returns covers the content and not the markers', () {
+    const cases = <MarkdownInlineStyle, String>{
+      MarkdownInlineStyle.bold: 'hola **mundo**',
+      MarkdownInlineStyle.italic: 'hola *mundo*',
+      MarkdownInlineStyle.strikethrough: 'hola ~~mundo~~',
+      MarkdownInlineStyle.code: 'hola `mundo`',
+    };
+    cases.forEach((style, expected) {
+      final wrap = wrapSelection(
+        MarkdownDocument.parse('hola mundo'),
+        0,
+        5,
+        10,
+        style,
+      );
+      expect(wrap.document.serialize(), expected, reason: '$style');
+      expect(wrap.selection.blockIndex, 0, reason: '$style');
+      expect(selectedTextOf(wrap), 'mundo', reason: '$style');
+    });
+  });
+
   test('a selection that swallows the space still reads back as a style', () {
     // A double tap on a word takes the trailing space with it, and the
     // tokenizer refuses a marker that touches one.
@@ -599,6 +682,37 @@ void main() {
     expect(leading.document.serialize(), 'hola *mundo*');
   });
 
+  // The trimmed range, not the one the user drew: the space the double tap
+  // took with it is outside the markers now, and a second tap that included
+  // it would find no pair to remove and add another one instead.
+  test('a trimmed selection comes back trimmed', () {
+    final trailing = wrapSelection(
+      MarkdownDocument.parse('hola mundo'),
+      0,
+      0,
+      5,
+      MarkdownInlineStyle.bold,
+    );
+    expect(trailing.document.serialize(), '**hola** mundo');
+    expect(
+      trailing.selection,
+      const DocumentRange(blockIndex: 0, start: 2, end: 6),
+    );
+    expect(selectedTextOf(trailing), 'hola');
+
+    // And the second tap it was trimmed for gets the line back.
+    expect(
+      wrapSelection(
+        trailing.document,
+        0,
+        trailing.selection.start,
+        trailing.selection.end,
+        MarkdownInlineStyle.bold,
+      ).document.serialize(),
+      'hola mundo',
+    );
+  });
+
   test('a tab is shrunk out of the selection like a space', () {
     final edit = wrapSelection(
       MarkdownDocument.parse('hola\tmundo'),
@@ -619,7 +733,10 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(edit.document.serialize(), 'hola mundo');
-    expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 5));
+    expect(
+      edit.selection,
+      const DocumentRange(blockIndex: 0, start: 4, end: 5),
+    );
   });
 
   test('italics over a bold word keeps the bold', () {
@@ -718,7 +835,10 @@ void main() {
       MarkdownInlineStyle.bold,
     );
     expect(edit.document.serialize(), source);
-    expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 7));
+    expect(
+      edit.selection,
+      const DocumentRange(blockIndex: 0, start: 2, end: 7),
+    );
   });
 
   test('a link needs a target, not a pair of markers', () {
@@ -730,7 +850,65 @@ void main() {
       MarkdownInlineStyle.link,
     );
     expect(edit.document.serialize(), 'hola mundo');
-    expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 4));
+    expect(
+      edit.selection,
+      const DocumentRange(blockIndex: 0, start: 0, end: 4),
+    );
+  });
+
+  // A selection that disappeared would tell the user something happened. Every
+  // one of these refuses for a reason of its own and none of them changed a
+  // character, so the words stay selected exactly as they were drawn.
+  test('a refused wrap hands the selection back untouched', () {
+    const refusals = <String, (String, int, int, MarkdownInlineStyle)>{
+      'a fence spans lines a single range cannot address': (
+        '```\ncodigo\n```',
+        4,
+        10,
+        MarkdownInlineStyle.bold,
+      ),
+      'an unsupported line is kept verbatim': (
+        '| tabla |',
+        2,
+        7,
+        MarkdownInlineStyle.bold,
+      ),
+      'a link needs a target rather than a pair of markers': (
+        'hola mundo',
+        0,
+        4,
+        MarkdownInlineStyle.link,
+      ),
+      'the markers would add up to a rule': (
+        '*',
+        0,
+        1,
+        MarkdownInlineStyle.italic,
+      ),
+      'the markers would open a fence over what follows': (
+        '``\nsegunda',
+        0,
+        1,
+        MarkdownInlineStyle.code,
+      ),
+      'nothing but spaces was selected': (
+        'hola mundo',
+        4,
+        5,
+        MarkdownInlineStyle.bold,
+      ),
+    };
+    refusals.forEach((reason, testCase) {
+      final (source, start, end, style) = testCase;
+      final document = MarkdownDocument.parse(source);
+      final wrap = wrapSelection(document, 0, start, end, style);
+      expect(wrap.document.serialize(), source, reason: reason);
+      expect(
+        wrap.selection,
+        DocumentRange(blockIndex: 0, start: start, end: end),
+        reason: reason,
+      );
+    });
   });
 
   test('a caret on a block that is not there changes nothing', () {
@@ -745,7 +923,11 @@ void main() {
 
     final wrap = wrapSelection(document, 7, 0, 3, MarkdownInlineStyle.bold);
     expect(wrap.document.serialize(), 'uno\ndos');
-    expect(wrap.caret, const DocumentCaret(blockIndex: 1, offset: 0));
+    // No line to measure a selection against, so there is none to hand back.
+    expect(
+      wrap.selection,
+      const DocumentRange(blockIndex: 1, start: 0, end: 0),
+    );
   });
 
   test('every wrap leaves a document that parses back to itself', () {
@@ -757,14 +939,62 @@ void main() {
         for (var start = 0; start <= length; start++) {
           for (var end = start; end <= length; end++) {
             final edit = wrapSelection(document, 0, start, end, style);
+            final where = '$style over "$line" $start..$end';
             if (!reparsesToItself(edit.document)) {
-              failures.add('$style over "$line" $start..$end');
+              failures.add('$where does not survive a reparse');
+            }
+            // A range that pointed outside the line would throw the moment
+            // the editor tried to select it.
+            if (!rangeIsInside(edit)) {
+              failures.add('$where left the range at ${edit.selection}');
             }
           }
         }
       }
     }
     expect(failures, isEmpty);
+  });
+
+  // The bug this range exists for: the same button has to toggle the style
+  // back off, and it can only do that if what it is handed still covers the
+  // words the first tap acted on.
+  test('wrapping twice with the returned range restores the source', () {
+    final failures = <String>[];
+    var checked = 0;
+    for (final line in _corpus) {
+      final source = '$line\nsegunda\ntercera';
+      final document = MarkdownDocument.parse(source);
+      final length = document.blocks.first.toSourceLine().length;
+      for (final entry in _markers.entries) {
+        for (var start = 0; start <= length; start++) {
+          for (var end = start; end <= length; end++) {
+            final once = wrapSelection(document, 0, start, end, entry.key);
+            // A refusal is its own round trip, and it is asserted above.
+            if (identical(once.document, document)) continue;
+            if (!togglesBackOff(once, entry.value)) continue;
+            checked++;
+            final twice = wrapSelection(
+              once.document,
+              0,
+              once.selection.start,
+              once.selection.end,
+              entry.key,
+            );
+            if (twice.document.serialize() != source) {
+              failures.add(
+                '${entry.key} over "$line" $start..$end wrote '
+                '"${once.document.blocks.first.toSourceLine()}" and came back '
+                'as "${twice.document.blocks.first.toSourceLine()}"',
+              );
+            }
+          }
+        }
+      }
+    }
+    expect(failures, isEmpty);
+    // A precondition that stopped admitting cases would leave this test
+    // passing on nothing at all.
+    expect(checked, greaterThan(2000));
   });
 
   test('the markers a wrap inserts always read back as that style', () {

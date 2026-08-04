@@ -25,12 +25,56 @@ class DocumentCaret {
   String toString() => 'DocumentCaret($blockIndex, $offset)';
 }
 
+/// A stretch of one block, with both ends measured over its full source line
+/// the way [DocumentCaret.offset] is.
+class DocumentRange {
+  final int blockIndex;
+  final int start;
+  final int end;
+
+  const DocumentRange({
+    required this.blockIndex,
+    required this.start,
+    required this.end,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is DocumentRange &&
+      other.blockIndex == blockIndex &&
+      other.start == start &&
+      other.end == end;
+
+  @override
+  int get hashCode => Object.hash(blockIndex, start, end);
+
+  @override
+  String toString() => 'DocumentRange($blockIndex, $start..$end)';
+}
+
 /// Result of a transformation: the new document and where the caret lands.
 class DocumentEdit {
   final MarkdownDocument document;
   final DocumentCaret caret;
 
   const DocumentEdit(this.document, this.caret);
+}
+
+/// Result of a wrap: the new document and the content left selected on it.
+///
+/// A type of its own rather than a nullable range added to [DocumentEdit].
+/// Wrapping is the one transformation here that ends on a stretch of text:
+/// splitting, merging, indenting and the block commands all land a caret and
+/// could never fill a range, so the field would be dead on four producers out
+/// of five and its null would have to double as "collapsed at the caret".
+/// Keeping the two apart also means a wrap cannot be handed to a caller that
+/// only knows how to place a caret, which is how the selection used to
+/// disappear the moment a word was made bold.
+class DocumentWrap {
+  final MarkdownDocument document;
+  final DocumentRange selection;
+
+  const DocumentWrap(this.document, this.selection);
 }
 
 /// Splits the active block at the caret, continuing lists when it makes sense.
@@ -410,7 +454,12 @@ const _inlineMarkers = <MarkdownInlineStyle, String>{
 };
 
 /// Wraps or unwraps a selection measured over the block's source line.
-DocumentEdit wrapSelection(
+///
+/// The range that comes back covers the content and never the markers, so
+/// handing it straight back in with the same style toggles that style off.
+/// A refusal returns the caller's own selection instead, because a selection
+/// that vanished would tell the user something happened when nothing did.
+DocumentWrap wrapSelection(
   MarkdownDocument document,
   int blockIndex,
   int start,
@@ -418,11 +467,14 @@ DocumentEdit wrapSelection(
   MarkdownInlineStyle style,
 ) {
   if (!_holdsBlock(document, blockIndex)) {
-    return DocumentEdit(
+    // There is no line to measure a selection against, so there is none to
+    // hand back either.
+    return DocumentWrap(
       document,
-      DocumentCaret(
+      DocumentRange(
         blockIndex: _clamp(blockIndex, document.blocks.length - 1),
-        offset: 0,
+        start: 0,
+        end: 0,
       ),
     );
   }
@@ -435,19 +487,23 @@ DocumentEdit wrapSelection(
   final block = document.blocks[blockIndex];
   final source = block.toSourceLine();
   final marker = _inlineMarkers[style];
+  // Nothing moved, so the selection stays on the characters the user put it
+  // on, pulled inside the line the way every acting path bounds its own range.
+  final unchanged = DocumentWrap(
+    document,
+    DocumentRange(
+      blockIndex: blockIndex,
+      start: _clamp(rangeStart, source.length),
+      end: _clamp(rangeEnd, source.length),
+    ),
+  );
   // A fence spans several lines and a raw block holds an unsupported one, so a
   // single pair of offsets cannot address either without losing source. A link
   // has no marker of this shape either: it needs a target, not a wrap.
   if (marker == null ||
       block.type == MarkdownBlockType.codeFence ||
       block.type == MarkdownBlockType.raw) {
-    return DocumentEdit(
-      document,
-      DocumentCaret(
-        blockIndex: blockIndex,
-        offset: _clamp(rangeEnd, source.length),
-      ),
-    );
+    return unchanged;
   }
 
   // The block marker is not styled text: wrapping it would demote a heading to
@@ -471,34 +527,37 @@ DocumentEdit wrapSelection(
       to--;
     }
   }
-  if (from == to) {
-    return DocumentEdit(
-      document,
-      DocumentCaret(blockIndex: blockIndex, offset: to),
-    );
-  }
+  if (from == to) return unchanged;
 
   final before = source.substring(0, from);
   final selected = source.substring(from, to);
   final after = source.substring(to);
 
+  // Where the content the user selected ends up on the rebuilt line, which is
+  // the whole point of the range: the markers move around it, so the offsets
+  // shift by however many of them landed in front of it and behind it.
   final String rebuilt;
-  final int caretEnd;
+  final int contentStart;
+  final int contentEnd;
   if (_endsWithMarker(before, marker) && _startsWithMarker(after, marker)) {
     rebuilt = '${before.substring(0, before.length - marker.length)}'
         '$selected${after.substring(marker.length)}';
-    caretEnd = to - marker.length;
+    contentStart = from - marker.length;
+    contentEnd = to - marker.length;
   } else if (selected.length > marker.length * 2 &&
       _startsWithMarker(selected, marker) &&
       _endsWithMarker(selected, marker)) {
-    // The selection swallowed the markers it should toggle off.
+    // The selection swallowed the markers it should toggle off, so what is
+    // left selected is narrower than what came in.
     rebuilt = '$before'
         '${selected.substring(marker.length, selected.length - marker.length)}'
         '$after';
-    caretEnd = to - marker.length * 2;
+    contentStart = from;
+    contentEnd = to - marker.length * 2;
   } else {
     rebuilt = '$before$marker$selected$marker$after';
-    caretEnd = to + marker.length;
+    contentStart = from + marker.length;
+    contentEnd = to + marker.length;
   }
 
   final rebuiltBlock = MarkdownDocument.parse(rebuilt).blocks.first;
@@ -506,10 +565,6 @@ DocumentEdit wrapSelection(
   // reads every block below it as code and the rule renders nothing at all.
   // Neither can be undone from here, because the block that replaced the line
   // no longer offers a selection to toggle.
-  final unchanged = DocumentEdit(
-    document,
-    DocumentCaret(blockIndex: blockIndex, offset: to),
-  );
   if (rebuiltBlock.type == MarkdownBlockType.codeFence ||
       rebuiltBlock.type == MarkdownBlockType.divider) {
     return unchanged;
@@ -517,9 +572,13 @@ DocumentEdit wrapSelection(
   final next = document.replaceBlock(blockIndex, rebuiltBlock);
   if (!_survivesReparse(next)) return unchanged;
 
-  return DocumentEdit(
+  return DocumentWrap(
     next,
-    DocumentCaret(blockIndex: blockIndex, offset: caretEnd),
+    DocumentRange(
+      blockIndex: blockIndex,
+      start: contentStart,
+      end: contentEnd,
+    ),
   );
 }
 
