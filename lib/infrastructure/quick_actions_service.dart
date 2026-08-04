@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Servicio para manejar Quick Actions de iOS (3D Touch / Haptic Touch)
@@ -7,17 +8,17 @@ class QuickActionsService {
   QuickActionsService._internal();
 
   static const _channel = MethodChannel('com.zentra.app/quickactions');
-  
+
   // Callback para cuando se selecciona una acción
   Function(String)? onActionSelected;
-  
+
   // Pending action (if app was launched from quick action)
   String? _pendingAction;
   String? get pendingAction => _pendingAction;
   void clearPendingAction() => _pendingAction = null;
 
   /// Inicializa el servicio y escucha por acciones
-  void initialize() {
+  Future<void> initialize() async {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'quickActionTriggered') {
         final action = call.arguments as String?;
@@ -31,10 +32,21 @@ class QuickActionsService {
         }
       }
     });
+
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+
+    try {
+      await _channel.invokeMethod<void>('ready');
+    } on MissingPluginException {
+      // Keep non-native test hosts and older builds from blocking startup.
+    }
   }
 
   /// Tipos de acciones disponibles (deben coincidir con Info.plist)
   static const String newHabitAction = 'NewHabitAction';
+  static const String newNoteAction = 'NewNoteAction';
   static const String pomodoroAction = 'PomodoroAction';
   static const String progressAction = 'ProgressAction';
 }

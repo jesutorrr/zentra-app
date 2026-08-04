@@ -3,20 +3,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart' show getDownloadsDirectory, getApplicationDocumentsDirectory;
+import 'package:path_provider/path_provider.dart'
+    show getApplicationDocumentsDirectory, getDownloadsDirectory;
 
-/// Servicio de logging para capturar eventos de la app
-/// Permite exportar logs para debugging en producción
+/// Bounded diagnostic logging with automatic secret and identifier redaction.
 class AppLogger {
   static final AppLogger _instance = AppLogger._internal();
   factory AppLogger() => _instance;
   AppLogger._internal();
 
-  // Circular buffer para mantener los últimos N logs
   static const int _maxLogs = 500;
   final Queue<LogEntry> _logs = Queue<LogEntry>();
-  
-  // Formato de fecha para los logs
+
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss.SSS');
 
   /// Registra un mensaje de información
@@ -30,12 +28,17 @@ class AppLogger {
   }
 
   /// Registra un mensaje de error
-  void error(String tag, String message, [Object? error, StackTrace? stackTrace]) {
+  void error(
+    String tag,
+    String message, [
+    Object? error,
+    StackTrace? stackTrace,
+  ]) {
     String fullMessage = message;
-    if (error != null) {
+    if (error != null && kDebugMode) {
       fullMessage += '\nError: $error';
     }
-    if (stackTrace != null) {
+    if (stackTrace != null && kDebugMode) {
       fullMessage += '\nStackTrace: $stackTrace';
     }
     _addLog(LogLevel.error, tag, fullMessage);
@@ -47,24 +50,59 @@ class AppLogger {
   }
 
   void _addLog(LogLevel level, String tag, String message) {
+    if (!kDebugMode && level == LogLevel.debug) return;
+
+    final safeTag = _redact(tag);
+    final safeMessage = _redact(message);
     final entry = LogEntry(
       timestamp: DateTime.now(),
       level: level,
-      tag: tag,
-      message: message,
+      tag: safeTag,
+      message: safeMessage,
     );
-    
+
     _logs.add(entry);
-    
-    // Mantener solo los últimos _maxLogs
+
     while (_logs.length > _maxLogs) {
       _logs.removeFirst();
     }
-    
-    // También imprimir en consola en modo debug
+
     if (kDebugMode) {
-      debugPrint('[${entry.levelString}] [$tag] $message');
+      debugPrint(
+        '[${entry.levelString}] [${entry.tag}] ${entry.message}',
+      );
     }
+  }
+
+  String _redact(String value) {
+    return value
+        .replaceAll(
+          RegExp(r'Bearer\s+[A-Za-z0-9._~+/-]+=*', caseSensitive: false),
+          'Bearer [REDACTED]',
+        )
+        .replaceAll(
+          RegExp(r'\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'),
+          '[REDACTED_TOKEN]',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',
+            caseSensitive: false,
+          ),
+          '[REDACTED_EMAIL]',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-'
+            r'[89ab][0-9a-f]{3}-[0-9a-f]{12}\b',
+            caseSensitive: false,
+          ),
+          '[REDACTED_ID]',
+        )
+        .replaceAllMapped(
+          RegExp(r'(https?://[^\s?]+)\?[^\s]+', caseSensitive: false),
+          (match) => '${match.group(1)}?[REDACTED_QUERY]',
+        );
   }
 
   /// Obtiene todos los logs como texto formateado
@@ -76,55 +114,59 @@ class AppLogger {
     buffer.writeln('');
     buffer.writeln('--- Logs ---');
     buffer.writeln('');
-    
     for (final log in _logs) {
-      buffer.writeln('${_dateFormat.format(log.timestamp)} [${log.levelString}] [${log.tag}]');
+      buffer.writeln(
+        '${_dateFormat.format(log.timestamp)} '
+        '[${log.levelString}] [${log.tag}]',
+      );
       buffer.writeln(log.message);
       buffer.writeln('');
     }
-    
+
     return buffer.toString();
   }
 
   /// Exporta los logs guardando en Descargas y compartiendo
   Future<String?> exportLogs() async {
     final logsText = getLogsAsText();
-    final fileName = 'zentra_logs_${DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now())}.txt';
-    
+    final fileName =
+        'zentra_logs_${DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now())}.txt';
+
     String? savedPath;
-    
+
     // Intentar guardar en archivo
     try {
       Directory? saveDir;
-      
       if (Platform.isAndroid) {
-        // Usar getDownloadsDirectory que es más seguro
         saveDir = await getDownloadsDirectory();
-        // Fallback a documentos si no está disponible
         saveDir ??= await getApplicationDocumentsDirectory();
       } else {
         saveDir = await getApplicationDocumentsDirectory();
       }
-      
+
       final file = File('${saveDir.path}/$fileName');
       await file.writeAsString(logsText);
       savedPath = file.path;
     } catch (e) {
-      debugPrint('Error saving logs to file: $e');
+      if (kDebugMode) {
+        debugPrint('Error saving logs to file: $e');
+      }
     }
-    
-    // Siempre compartir para que el usuario pueda enviarlo
+
     try {
       await SharePlus.instance.share(
         ShareParams(
           text: logsText,
-          subject: 'Zentra App Logs - ${DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now())}',
+          subject:
+              'Zentra App Logs - ${DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now())}',
         ),
       );
     } catch (e) {
-      debugPrint('Error sharing logs: $e');
+      if (kDebugMode) {
+        debugPrint('Error sharing logs: $e');
+      }
     }
-    
+
     return savedPath;
   }
 

@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 
 /// Servicio para manejar Siri Shortcuts de iOS
 class SiriShortcutsService {
-  static final SiriShortcutsService _instance = SiriShortcutsService._internal();
+  static final SiriShortcutsService _instance =
+      SiriShortcutsService._internal();
   factory SiriShortcutsService() => _instance;
   SiriShortcutsService._internal();
 
@@ -25,10 +26,13 @@ class SiriShortcutsService {
   }
 
   /// Dona un shortcut para "Completar hábito"
-  Future<void> donateCompleteHabitShortcut(String habitId, String habitTitle) async {
+  Future<void> donateCompleteHabitShortcut(
+    String habitId,
+    String habitTitle,
+  ) async {
     // Only available on iOS
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
-    
+
     try {
       await _channel.invokeMethod('donateShortcut', {
         'type': 'completeHabit',
@@ -37,7 +41,9 @@ class SiriShortcutsService {
         'phrase': 'Completé $habitTitle',
       });
     } catch (e) {
-      debugPrint('Failed to donate shortcut: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to donate shortcut: $e');
+      }
     }
   }
 
@@ -54,7 +60,9 @@ class SiriShortcutsService {
         'phrase': 'Iniciar pomodoro de $activityName',
       });
     } catch (e) {
-      debugPrint('Failed to donate shortcut: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to donate shortcut: $e');
+      }
     }
   }
 
@@ -70,7 +78,9 @@ class SiriShortcutsService {
         'phrase': 'Muéstrame mi progreso de hábitos',
       });
     } catch (e) {
-      debugPrint('Failed to donate shortcut: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to donate shortcut: $e');
+      }
     }
   }
 
