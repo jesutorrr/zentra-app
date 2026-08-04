@@ -1,191 +1,157 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../application/user_provider.dart';
-import '../application/habit_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' as riverpod;
+
+import '../application/habit_controller.dart';
 import '../application/pomodoro_provider.dart';
-import '../application/auth_provider.dart';
+import '../application/profile_controller.dart';
+import '../application/profile_state.dart';
+import '../application/progress_sync.dart';
+import '../application/session_controller.dart';
 import '../domain/user_profile.dart';
+import 'motion_policy.dart';
+import 'profile_setup_screen.dart';
 import 'theme.dart';
 import 'settings_screen.dart';
+import 'widgets/achievement_components.dart';
+import 'widgets/ambient_background.dart';
 import 'widgets/emoji_selector.dart';
-import 'widgets/stat_card.dart';
 import 'widgets/skeleton_loader.dart';
 
 /// Profile screen showing user stats and achievements
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends riverpod.ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  riverpod.ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends riverpod.ConsumerState<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _syncStats();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncStats());
   }
 
   Future<void> _syncStats() async {
-    final userProvider = context.read<UserProvider>();
-    final habitProvider = context.read<HabitProvider>();
-    final pomodoroProvider = context.read<PomodoroProvider>();
-    
-    if (!userProvider.hasProfile) return;
-
-    // Calculate stats from habit provider
-    int totalCompleted = 0;
-    int longestStreak = 0;
-    
-    for (final habit in habitProvider.habits) {
-      final streak = habitProvider.getHabitStreak(habit.id);
-      if (streak > longestStreak) longestStreak = streak;
-    }
-    
-    // Count total completions from logs
-    totalCompleted = habitProvider.logs.length;
-    
-    // Calculate days active
-    final uniqueDays = habitProvider.logs
-        .map((log) => '${log.date.year}-${log.date.month}-${log.date.day}')
-        .toSet()
-        .length;
-
-    // Contar completaciones por categoría
-    int aguaCount = 0;
-    int movimientoCount = 0;
-    int suenoCount = 0;
-    int focoCount = 0;
-
-    for (final log in habitProvider.logs) {
-      final habit = habitProvider.getHabitById(log.habitId);
-      if (habit != null) {
-        switch (habit.category.name) {
-          case 'agua':
-            aguaCount++;
-            break;
-          case 'movimiento':
-            movimientoCount++;
-            break;
-          case 'sueno':
-            suenoCount++;
-            break;
-          case 'foco':
-            focoCount++;
-            break;
-        }
-      }
-    }
-
-    await userProvider.recordHabitCompletion(
-      totalCompleted: totalCompleted,
-      longestStreak: longestStreak,
-      daysActive: uniqueDays,
-      categoryAguaCount: aguaCount,
-      categoryMovimientoCount: movimientoCount,
-      categorySuenoCount: suenoCount,
-      categoryFocoCount: focoCount,
-      pomodorosCount: pomodoroProvider.totalPomodoros,
-    );
+    final ownerId = ref.read(activeOwnerIdProvider);
+    if (ownerId == null) return;
+    final profileState =
+        ref.read(profileControllerProvider(ownerId)).valueOrNull;
+    final habitState = ref.read(habitControllerProvider(ownerId)).valueOrNull;
+    if (profileState?.profile == null || habitState == null) return;
+    final pomodoroState = ref.read(pomodoroControllerProvider(ownerId));
+    await ref.read(profileControllerProvider(ownerId).notifier).syncProgress(
+          snapshot: buildProgressSnapshotFromState(
+            habitState: habitState,
+            activityHistory: pomodoroState.activityHistory,
+            totalPomodoros: pomodoroState.totalPomodoros,
+            totalFocusMinutes: pomodoroState.totalMinutes,
+            now: DateTime.now(),
+          ),
+          announceUnlocks: false,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final ownerId = ref.watch(activeOwnerIdProvider);
+    if (ownerId == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final profileAsync = ref.watch(profileControllerProvider(ownerId));
+    final profileState = profileAsync.valueOrNull;
 
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        if (userProvider.isLoading) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Mi Perfil')),
-            body: const ProfileSkeleton(),
-          );
-        }
+    if (profileState == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Mi Perfil')),
+        body: profileAsync.hasError
+            ? const Center(child: Text('No pudimos cargar tu perfil.'))
+            : const ProfileSkeleton(),
+      );
+    }
 
-        if (!userProvider.hasProfile) {
-          return const _CreateProfileScreen();
-        }
+    if (!profileState.hasProfile) {
+      return ProfileSetupScreen(ownerId: ownerId);
+    }
 
-        final profile = userProvider.profile!;
-        final levelProgress = _calculateLevelProgress(profile);
+    final profile = profileState.profile!;
+    final levelProgress = _calculateLevelProgress(profile);
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Mi Perfil'),
-            centerTitle: false,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _showEditProfileDialog(context, profile),
-                tooltip: 'Editar perfil',
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings_rounded),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                ),
-                tooltip: 'Configuración',
-              ),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mi Perfil'),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => _showEditProfileDialog(
+              context,
+              profile,
+              ownerId,
+            ),
+            tooltip: 'Editar perfil',
           ),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: RefreshIndicator(
-                onRefresh: _syncStats,
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    // Profile header
-                    _ProfileHeader(profile: profile, isDark: isDark),
-                    const SizedBox(height: 24),
+          IconButton(
+            icon: const Icon(Icons.settings_rounded),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+            tooltip: 'Configuración',
+          ),
+        ],
+      ),
+      body: ZentraAmbientBackground(
+        intensity: 0.85,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: RefreshIndicator(
+              onRefresh: _syncStats,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Profile header
+                  _ProfileHeader(profile: profile, isDark: isDark),
+                  const SizedBox(height: 24),
 
-                    // Level progress
-                    _LevelCard(
-                      profile: profile,
-                      progress: levelProgress,
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 24),
+                  // Level progress
+                  _LevelCard(
+                    profile: profile,
+                    progress: levelProgress,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 24),
 
-                    // Stats cards
-                    _StatsSection(profile: profile, isDark: isDark),
-                    const SizedBox(height: 24),
+                  // Stats cards
+                  _StatsSection(profile: profile, isDark: isDark),
+                  const SizedBox(height: 24),
 
-                    // Achievements
-                    _AchievementsSection(
-                      userProvider: userProvider,
-                      habitProvider: context.read<HabitProvider>(),
-                      pomodoroProvider: context.read<PomodoroProvider>(),
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 40),
-                  ],
-                ),
+                  // Achievements
+                  _AchievementsSection(
+                    profileState: profileState,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   double _calculateLevelProgress(UserProfile profile) {
-    final currentLevelXP = profile.currentLevel > 1
-        ? UserProfile.getXPForNextLevel(profile.currentLevel - 1)
-        : 0;
-    final nextLevelXP = UserProfile.getXPForNextLevel(profile.currentLevel);
-    final currentXP = profile.totalHabitsCompleted;
-
-    if (profile.currentLevel >= 10) return 1.0;
-    
-    return ((currentXP - currentLevelXP) / (nextLevelXP - currentLevelXP))
-        .clamp(0.0, 1.0);
+    return profile.levelProgress;
   }
 
-  void _showEditProfileDialog(BuildContext context, UserProfile profile) {
+  void _showEditProfileDialog(
+    BuildContext context,
+    UserProfile profile,
+    String ownerId,
+  ) {
     final nameController = TextEditingController(text: profile.name);
     String selectedEmoji = profile.avatarEmoji ?? '😊';
 
@@ -209,19 +175,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Editar Perfil',
+                'Editar perfil',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               const SizedBox(height: 24),
-              
+
               // Avatar selector
-              LabeledEmojiSelector(
+              CompactAvatarPicker(
                 label: 'Avatar',
                 selectedEmoji: selectedEmoji,
-                onEmojiSelected: (emoji) {
-                  setModalState(() => selectedEmoji = emoji);
+                onTap: () async {
+                  final emoji = await showEmojiPickerSheet(
+                    context: context,
+                    selectedEmoji: selectedEmoji,
+                  );
+                  if (emoji != null && context.mounted) {
+                    setModalState(() => selectedEmoji = emoji);
+                  }
                 },
               ),
               const SizedBox(height: 24),
@@ -243,10 +215,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: FilledButton(
                   onPressed: () async {
                     if (nameController.text.trim().isNotEmpty) {
-                      await context.read<UserProvider>().updateProfile(
-                        name: nameController.text.trim(),
-                        avatarEmoji: selectedEmoji,
-                      );
+                      await ref
+                          .read(profileControllerProvider(ownerId).notifier)
+                          .updateProfile(
+                            name: nameController.text.trim(),
+                            avatarEmoji: selectedEmoji,
+                          );
                       if (context.mounted) Navigator.pop(context);
                     }
                   },
@@ -261,154 +235,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// Create profile screen for first-time users
-class _CreateProfileScreen extends StatefulWidget {
-  const _CreateProfileScreen();
-
-  @override
-  State<_CreateProfileScreen> createState() => _CreateProfileScreenState();
-}
-
-class _CreateProfileScreenState extends State<_CreateProfileScreen> {
-  final _nameController = TextEditingController();
-  String _selectedEmoji = '😊';
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Welcome icon
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      gradient: AppTheme.cardGradient(colorScheme, isDark),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _selectedEmoji,
-                        style: const TextStyle(fontSize: 48),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  Text(
-                    '¡Bienvenido!',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Crea tu perfil para comenzar',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  // Avatar selector
-                  LabeledEmojiSelector(
-                    label: 'Elige tu avatar',
-                    selectedEmoji: _selectedEmoji,
-                    onEmojiSelected: (emoji) {
-                      setState(() => _selectedEmoji = emoji);
-                    },
-                    compact: true,
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Name field
-                  TextField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: '¿Cómo te llamas?',
-                      hintText: 'Tu nombre',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.person_outline),
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _createProfile(),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Create button
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _createProfile,
-                      icon: const Icon(Icons.rocket_launch_rounded),
-                      label: const Text('¡Comenzar!'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _createProfile() async {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor ingresa tu nombre')),
-      );
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    await context.read<UserProvider>().createProfile(
-      name: name,
-      avatarEmoji: _selectedEmoji,
-    );
-  }
-}
-
 /// Profile header with avatar and name - FASE 8: Mejorado
-class _ProfileHeader extends StatefulWidget {
+class _ProfileHeader extends riverpod.ConsumerStatefulWidget {
   final UserProfile profile;
   final bool isDark;
 
   const _ProfileHeader({required this.profile, required this.isDark});
 
   @override
-  State<_ProfileHeader> createState() => _ProfileHeaderState();
+  riverpod.ConsumerState<_ProfileHeader> createState() => _ProfileHeaderState();
 }
 
-class _ProfileHeaderState extends State<_ProfileHeader>
+class _ProfileHeaderState extends riverpod.ConsumerState<_ProfileHeader>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+  bool _motionConfigured = false;
 
   @override
   void initState() {
@@ -423,7 +266,18 @@ class _ProfileHeaderState extends State<_ProfileHeader>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
-    _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_motionConfigured) return;
+    _motionConfigured = true;
+    if (context.motionPolicy.allowsDecorativeMotion) {
+      _controller.forward();
+    } else {
+      _controller.value = 1;
+    }
   }
 
   @override
@@ -437,10 +291,15 @@ class _ProfileHeaderState extends State<_ProfileHeader>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     // Usar fecha de creación del usuario (más confiable que el perfil)
-    final authProvider = context.watch<AuthProvider>();
-    final userCreatedAt = authProvider.currentUser?.createdAt ?? widget.profile.createdAt;
+    final userCreatedAt = ref.watch(
+          sessionControllerProvider.select(
+            (session) => session.valueOrNull?.currentUser?.createdAt,
+          ),
+        ) ??
+        widget.profile.createdAt;
     final daysSinceStart = DateTime.now().difference(userCreatedAt).inDays;
-    final textColor = widget.isDark ? Colors.white : colorScheme.onPrimaryContainer;
+    final textColor =
+        widget.isDark ? Colors.white : colorScheme.onPrimaryContainer;
 
     return AnimatedBuilder(
       animation: _controller,
@@ -450,88 +309,87 @@ class _ProfileHeaderState extends State<_ProfileHeader>
           child: Opacity(
             opacity: _fadeAnimation.value,
             child: Container(
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: AppTheme.cardGradient(colorScheme, widget.isDark),
                 borderRadius: BorderRadius.circular(28),
                 border: AppTheme.cardGradientBorder(colorScheme, widget.isDark),
                 boxShadow: AppTheme.cardShadow(colorScheme, widget.isDark),
               ),
-              child: Column(
-                children: [
-                  // Avatar grande y centrado con Hero animation
-                  Hero(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stacked = constraints.maxWidth < 300 ||
+                      MediaQuery.textScalerOf(context).scale(16) > 24;
+                  final avatarSize = stacked ? 82.0 : 72.0;
+                  final avatar = Hero(
                     tag: 'profile_avatar',
                     child: Container(
-                      width: 100,
-                      height: 100,
+                      width: avatarSize,
+                      height: avatarSize,
                       decoration: BoxDecoration(
                         color: textColor.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: textColor.withValues(alpha: 0.2),
-                          width: 3,
+                          width: 2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: colorScheme.primary.withValues(alpha: 0.2),
-                            blurRadius: 20,
-                            spreadRadius: 5,
+                            color: colorScheme.primary.withValues(alpha: 0.16),
+                            blurRadius: 16,
+                            spreadRadius: 2,
                           ),
                         ],
                       ),
-                      child: Center(
-                        child: Text(
-                          widget.profile.avatarEmoji ?? '😊',
-                          style: const TextStyle(fontSize: 48),
+                      alignment: Alignment.center,
+                      child: Text(
+                        widget.profile.avatarEmoji ?? '😊',
+                        style: TextStyle(fontSize: stacked ? 40 : 34),
+                        textScaler: TextScaler.noScaling,
+                      ),
+                    ),
+                  );
+                  final identity = Column(
+                    crossAxisAlignment: stacked
+                        ? CrossAxisAlignment.center
+                        : CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.profile.name,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
                         ),
+                        textAlign: stacked ? TextAlign.center : TextAlign.start,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Nombre
-                  Text(
-                    widget.profile.name,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Badge de días
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: textColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: textColor.withValues(alpha: 0.2),
-                        width: 1,
+                      const SizedBox(height: 4),
+                      Text(
+                        '$daysSinceStart días con Zentra',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: textColor.withValues(alpha: 0.78),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: stacked ? TextAlign.center : TextAlign.start,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    ],
+                  );
+                  if (stacked) {
+                    return Column(
                       children: [
-                        Icon(
-                          Icons.calendar_today_rounded,
-                          size: 16,
-                          color: textColor.withValues(alpha: 0.8),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '$daysSinceStart días en tu viaje',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: textColor.withValues(alpha: 0.9),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        avatar,
+                        const SizedBox(height: 12),
+                        identity,
                       ],
-                    ),
-                  ),
-                ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      avatar,
+                      const SizedBox(width: 18),
+                      Expanded(child: identity),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -561,6 +419,7 @@ class _LevelCardState extends State<_LevelCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _progressAnimation;
+  bool _motionConfigured = false;
 
   @override
   void initState() {
@@ -569,15 +428,25 @@ class _LevelCardState extends State<_LevelCard>
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    _progressAnimation = Tween<double>(begin: 0.0, end: widget.progress)
-        .animate(CurvedAnimation(
-          parent: _controller,
-          curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
-        ),);
-    
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _controller.forward();
-    });
+    _progressAnimation =
+        Tween<double>(begin: 0.0, end: widget.progress).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_motionConfigured) return;
+    _motionConfigured = true;
+    if (context.motionPolicy.allowsDecorativeMotion) {
+      _controller.forward();
+    } else {
+      _controller.value = 1;
+    }
   }
 
   @override
@@ -591,8 +460,11 @@ class _LevelCardState extends State<_LevelCard>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final levelName = UserProfile.getLevelName(widget.profile.currentLevel);
-    final nextLevelXP = UserProfile.getXPForNextLevel(widget.profile.currentLevel);
-    final isMaxLevel = widget.profile.currentLevel >= 10;
+    final nextLevelXP = widget.profile.xpForNextLevel;
+    final isMaxLevel =
+        widget.profile.currentLevel >= UserProfile.levelThresholds.length;
+    final remainingXp =
+        (nextLevelXP - widget.profile.totalXp).clamp(0, nextLevelXP);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -625,7 +497,9 @@ class _LevelCardState extends State<_LevelCard>
                     ],
                   ),
                   child: Icon(
-                    isMaxLevel ? Icons.workspace_premium_rounded : Icons.bolt_rounded,
+                    isMaxLevel
+                        ? Icons.workspace_premium_rounded
+                        : Icons.bolt_rounded,
                     size: 20,
                     color: AppTheme.accentOrange,
                   ),
@@ -652,7 +526,8 @@ class _LevelCardState extends State<_LevelCard>
                 ),
                 // XP Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
@@ -670,7 +545,7 @@ class _LevelCardState extends State<_LevelCard>
                     ],
                   ),
                   child: Text(
-                    '${widget.profile.totalHabitsCompleted} XP',
+                    '${widget.profile.totalXp} XP',
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
@@ -714,7 +589,8 @@ class _LevelCardState extends State<_LevelCard>
                               borderRadius: BorderRadius.circular(7),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.accentOrange.withValues(alpha: 0.4),
+                                  color: AppTheme.accentOrange
+                                      .withValues(alpha: 0.4),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -737,7 +613,8 @@ class _LevelCardState extends State<_LevelCard>
                         ),
                         if (!isMaxLevel)
                           Text(
-                            'Siguiente nivel: $nextLevelXP XP',
+                            '$remainingXp XP para nivel '
+                            '${widget.profile.currentLevel + 1}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -745,10 +622,14 @@ class _LevelCardState extends State<_LevelCard>
                         else
                           Row(
                             children: [
-                              const Icon(Icons.emoji_events_rounded, size: 16, color: AppTheme.accentAmber),
+                              const Icon(
+                                Icons.emoji_events_rounded,
+                                size: 16,
+                                color: AppTheme.accentAmber,
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                '¡Nivel máximo!',
+                                'Nivel máximo',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: AppTheme.accentAmber,
                                   fontWeight: FontWeight.w700,
@@ -780,13 +661,44 @@ class _StatsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final metrics = [
+      (
+        title: 'Completados',
+        value: '${profile.totalHabitsCompleted}',
+        icon: Icons.check_circle_rounded,
+        color: AppTheme.successGreen,
+      ),
+      (
+        title: 'Mejor racha',
+        value: '${profile.longestStreak}',
+        icon: Icons.local_fire_department_rounded,
+        color: AppTheme.accentOrange,
+      ),
+      (
+        title: 'Días activos',
+        value: '${profile.totalDaysActive}',
+        icon: Icons.calendar_today_rounded,
+        color: colorScheme.primary,
+      ),
+      (
+        title: 'Logros',
+        value:
+            '${profile.unlockedAchievements.length}/${Achievements.all.length}',
+        icon: Icons.emoji_events_rounded,
+        color: AppTheme.accentAmber,
+      ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(Icons.analytics_outlined, size: 20, color: colorScheme.primary),
+            Icon(
+              Icons.analytics_outlined,
+              size: 20,
+              color: colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             Text(
               'Estadísticas',
@@ -797,127 +709,144 @@ class _StatsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: StatCard(
-                title: 'Completados',
-                value: '${profile.totalHabitsCompleted}',
-                icon: Icons.check_circle_rounded,
-                iconColor: AppTheme.successGreen,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatCard(
-                title: 'Mejor racha',
-                value: '${profile.longestStreak}',
-                icon: Icons.local_fire_department_rounded,
-                iconColor: AppTheme.accentOrange,
-                isDark: isDark,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: StatCard(
-                title: 'Días activos',
-                value: '${profile.totalDaysActive}',
-                icon: Icons.calendar_today_rounded,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: StatCard(
-                title: 'Logros',
-                value: '${profile.unlockedAchievements.length}/${Achievements.all.length}',
-                icon: Icons.emoji_events_rounded,
-                iconColor: AppTheme.accentAmber,
-                isDark: isDark,
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final singleColumn =
+                MediaQuery.textScalerOf(context).scale(16) > 26 ||
+                    constraints.maxWidth < 300;
+            const spacing = 12.0;
+            final width = singleColumn
+                ? constraints.maxWidth
+                : (constraints.maxWidth - spacing) / 2;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (final metric in metrics)
+                  SizedBox(
+                    width: width,
+                    child: _ProfileMetricCard(
+                      title: metric.title,
+                      value: metric.value,
+                      icon: metric.icon,
+                      color: metric.color,
+                      isDark: isDark,
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
   }
 }
 
-/// Achievements section
-class _AchievementsSection extends StatelessWidget {
-  final UserProvider userProvider;
-  final HabitProvider habitProvider;
-  final PomodoroProvider pomodoroProvider;
+class _ProfileMetricCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
   final bool isDark;
 
-  const _AchievementsSection({
-    required this.userProvider,
-    required this.habitProvider,
-    required this.pomodoroProvider,
+  const _ProfileMetricCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
     required this.isDark,
   });
 
-  /// Obtener el progreso actual para un tipo de logro
-  int _getProgressForAchievement(Achievement achievement) {
-    final profile = userProvider.profile;
-    if (profile == null) return 0;
-
-    switch (achievement.type) {
-      case AchievementType.habitsCompleted:
-        return profile.totalHabitsCompleted;
-      case AchievementType.streakDays:
-        return profile.longestStreak;
-      case AchievementType.daysActive:
-        return profile.totalDaysActive;
-      case AchievementType.categoryAgua:
-        return _countCategoryLogs('agua');
-      case AchievementType.categoryMovimiento:
-        return _countCategoryLogs('movimiento');
-      case AchievementType.categorySueno:
-        return _countCategoryLogs('sueno');
-      case AchievementType.categoryFoco:
-        return _countCategoryLogs('foco');
-      case AchievementType.pomodorosCompleted:
-        return pomodoroProvider.totalPomodoros;
-      default:
-        return 0;
-    }
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Semantics(
+      container: true,
+      label: '$title, $value',
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark
+              ? colors.surfaceContainerHighest.withValues(alpha: 0.42)
+              : colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: color.withValues(alpha: isDark ? 0.28 : 0.18),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+}
 
-  int _countCategoryLogs(String categoryName) {
-    int count = 0;
-    for (final log in habitProvider.logs) {
-      final habit = habitProvider.getHabitById(log.habitId);
-      if (habit != null && habit.category.name == categoryName) {
-        count++;
-      }
-    }
-    return count;
+/// Achievements section
+class _AchievementsSection extends StatelessWidget {
+  final ProfileState profileState;
+  final bool isDark;
+
+  const _AchievementsSection({
+    required this.profileState,
+    required this.isDark,
+  });
+
+  int _getProgressForAchievement(Achievement achievement) {
+    final profile = profileState.profile;
+    if (profile == null) return 0;
+    return achievement.progress(profile);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final unlocked = userProvider.unlockedAchievements;
-    final locked = userProvider.lockedAchievements;
+    final profile = profileState.profile!;
+    final unlocked = profileState.unlockedAchievements;
+    final next = profileState.nextAchievements(limit: 1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(Icons.emoji_events_outlined, size: 20, color: colorScheme.primary),
+            Icon(
+              Icons.emoji_events_outlined,
+              size: 20,
+              color: colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             Text(
-              'Logros',
+              'Tu colección',
               style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const Spacer(),
@@ -937,61 +866,70 @@ class _AchievementsSection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-
-        // Progress bar
+        const SizedBox(height: 14),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: LinearProgressIndicator(
-            value: userProvider.achievementProgress,
+            value: profileState.achievementProgress,
             minHeight: 8,
             backgroundColor: isDark
                 ? colorScheme.surfaceContainerHighest.opacity50
                 : colorScheme.surfaceContainerHighest,
             valueColor: AlwaysStoppedAnimation<Color>(
-              userProvider.hasAllAchievements
+              profileState.hasAllAchievements
                   ? AppTheme.successGreen
                   : colorScheme.primary,
             ),
           ),
         ),
         const SizedBox(height: 16),
-
-        // Unlocked achievements
         if (unlocked.isNotEmpty) ...[
           Text(
-            'Desbloqueados',
+            'Último logro',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
-          ...unlocked.map((a) => _AchievementTile(
-            achievement: a,
+          _AchievementTile(
+            achievement: unlocked.last,
             isUnlocked: true,
             isDark: isDark,
-          ),),
+          ),
           const SizedBox(height: 16),
         ],
-
-        // Locked achievements
-        if (locked.isNotEmpty) ...[
+        if (next.isNotEmpty) ...[
           Text(
-            'Por desbloquear',
+            'Siguiente',
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
-          ...locked.map((a) => _AchievementTile(
-            achievement: a,
-            isUnlocked: false,
-            isDark: isDark,
-            currentProgress: _getProgressForAchievement(a),
-          ),),
+          ...next.map(
+            (a) => _AchievementTile(
+              achievement: a,
+              isUnlocked: false,
+              isDark: isDark,
+              currentProgress: _getProgressForAchievement(a),
+            ),
+          ),
         ],
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            key: const ValueKey('profile-achievement-collection'),
+            onPressed: () => showAchievementCollection(
+              context,
+              profile: profile,
+            ),
+            icon: const Icon(Icons.auto_awesome_mosaic_outlined),
+            label: const Text('Ver colección completa'),
+          ),
+        ),
       ],
     );
   }
@@ -1015,9 +953,10 @@ class _AchievementTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     // Calcular porcentaje de progreso
-    final progressPercent = (currentProgress / achievement.requirement).clamp(0.0, 1.0);
+    final progressPercent =
+        (currentProgress / achievement.requirement).clamp(0.0, 1.0);
     final progressPercentText = (progressPercent * 100).toInt();
 
     return Container(
@@ -1050,11 +989,14 @@ class _AchievementTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
-                  child: Text(
-                    isUnlocked ? achievement.emoji : '🔒',
-                    style: TextStyle(
-                      fontSize: isUnlocked ? 22 : 18,
-                    ),
+                  child: Icon(
+                    isUnlocked
+                        ? achievementIcon(achievement.symbol)
+                        : Icons.lock_outline_rounded,
+                    size: isUnlocked ? 22 : 18,
+                    color: isUnlocked
+                        ? AppTheme.successGreen
+                        : colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -1078,6 +1020,17 @@ class _AchievementTile extends StatelessWidget {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '+${achievement.rewardXp} XP',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: achievementColor(
+                          achievement.group,
+                          colorScheme,
+                        ),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1090,7 +1043,8 @@ class _AchievementTile extends StatelessWidget {
               else
                 // Mostrar porcentaje para logros bloqueados
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: colorScheme.primary.opacity15,
                     borderRadius: BorderRadius.circular(8),
@@ -1145,4 +1099,3 @@ class _AchievementTile extends StatelessWidget {
     );
   }
 }
-

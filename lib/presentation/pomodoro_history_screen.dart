@@ -1,474 +1,571 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../application/pomodoro_provider.dart';
-import '../domain/pomodoro_activity.dart';
+import 'dart:math' as math;
 
-class PomodoroHistoryScreen extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../application/pomodoro_provider.dart';
+import '../application/session_controller.dart';
+import '../domain/pomodoro_activity.dart';
+import 'design_tokens.dart';
+import 'motion_policy.dart';
+import 'widgets/responsive_layout.dart';
+
+class PomodoroHistoryScreen extends ConsumerWidget {
   const PomodoroHistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ownerId = ref.watch(activeOwnerIdProvider);
+    if (ownerId == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final provider = ref.watch(pomodoroControllerProvider(ownerId));
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Historial de Pomodoros'),
-        centerTitle: true,
+        title: const Text('Historial de enfoque'),
       ),
-      body: Consumer<PomodoroProvider>(
-        builder: (context, provider, child) {
-          final weeklyData = provider.weeklyChartData;
-          final dailySummaries = provider.dailySummaries;
-          
-          if (provider.activityHistory.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.history,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Sin actividades completadas',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
+      body: SafeArea(
+        top: false,
+        child: provider.activityHistory.isEmpty
+            ? const _EmptyFocusHistory()
+            : ResponsiveLayoutBuilder(
+                builder: (context, layout) {
+                  final overview = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _FocusSummary(activities: provider.activityHistory),
+                      SizedBox(height: context.spacing.md),
+                      _FocusWeekChart(data: provider.weeklyChartData),
+                    ],
+                  );
+                  final timeline = _FocusTimeline(
+                    summaries: provider.dailySummaries,
+                  );
+
+                  return SingleChildScrollView(
+                    key: const ValueKey('focus_history_scroll'),
+                    padding: EdgeInsets.fromLTRB(
+                      layout.horizontalPagePadding,
+                      layout.verticalPagePadding,
+                      layout.horizontalPagePadding,
+                      context.spacing.xxl,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Completa tu primer Pomodoro para\nver tu historial aquí',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
+                    child: ResponsiveContentFrame(
+                      maxWidth: 1120,
+                      child: layout.isExpanded
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 4, child: overview),
+                                SizedBox(width: context.spacing.xl),
+                                Expanded(flex: 6, child: timeline),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                overview,
+                                SizedBox(height: context.spacing.lg),
+                                timeline,
+                              ],
+                            ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return CustomScrollView(
-            slivers: [
-              // Gráfica de actividades
-              SliverToBoxAdapter(
-                child: _ActivityChart(weeklyData: weeklyData),
-              ),
-              
-              // Resumen
-              SliverToBoxAdapter(
-                child: _SummaryCard(activities: provider.activityHistory),
-              ),
-              
-              // Lista de actividades por día - usando SliverList simple
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    // Flatten the dailySummaries into a single list with headers
-                    int currentIndex = 0;
-                    for (final summary in dailySummaries) {
-                      // Header for this date
-                      if (index == currentIndex) {
-                        return _DateHeader(
-                          date: summary.date,
-                          count: summary.activities.length,
-                        );
-                      }
-                      currentIndex++;
-                      
-                      // Activities for this date
-                      for (final activity in summary.activities) {
-                        if (index == currentIndex) {
-                          return _ActivityTile(activity: activity);
-                        }
-                        currentIndex++;
-                      }
-                    }
-                    return null;
-                  },
-                  childCount: dailySummaries.fold<int>(
-                    0, 
-                    (sum, s) => sum + 1 + s.activities.length, // 1 header + activities
-                  ),
-                ),
-              ),
-              
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 24),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _ActivityChart extends StatelessWidget {
-  final List<Map<String, dynamic>> weeklyData;
-
-  const _ActivityChart({required this.weeklyData});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    final maxValue = weeklyData.fold(0, (max, item) {
-      final count = item['count'] as int;
-      return count > max ? count : max;
-    });
-    final chartMax = maxValue > 0 ? maxValue : 1;
-
-    return Card(
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.bar_chart, color: colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'Actividad (últimos 7 días)',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 150,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final barWidth = (constraints.maxWidth - 32) / 7 - 8;
-                  
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: weeklyData.map((data) {
-                      final count = data['count'] as int;
-                      final day = data['day'] as String;
-                      final date = data['date'] as DateTime;
-                      final heightPercent = count / chartMax;
-                      final isToday = _isToday(date);
-                      
-                      return Tooltip(
-                        message: '${_formatShortDate(date)}: $count actividades',
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            if (count > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text(
-                                  '$count',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              width: barWidth.clamp(20.0, 40.0),
-                              height: count > 0 ? (100 * heightPercent).clamp(8.0, 100.0) : 4,
-                              decoration: BoxDecoration(
-                                color: count > 0
-                                    ? (isToday ? colorScheme.primary : colorScheme.primaryContainer)
-                                    : colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(4),
-                                border: isToday
-                                    ? Border.all(color: colorScheme.primary, width: 2)
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              day,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: isToday ? colorScheme.primary : colorScheme.outline,
-                                fontWeight: isToday ? FontWeight.bold : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
                   );
                 },
               ),
-            ),
-          ],
+      ),
+    );
+  }
+}
+
+class _EmptyFocusHistory extends StatelessWidget {
+  const _EmptyFocusHistory();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(context.spacing.xl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 104,
+                height: 104,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: context.zentraPalette.calmMint,
+                ),
+                child: Icon(
+                  Icons.timer_outlined,
+                  size: 48,
+                  color: context.zentraPalette.focus,
+                ),
+              ),
+              SizedBox(height: context.spacing.lg),
+              Text(
+                'Aún no hay sesiones completadas',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              SizedBox(height: context.spacing.xs),
+              Text(
+                'Cuando termines tu primer enfoque, aquí verás el tiempo que te has regalado.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              SizedBox(height: context.spacing.lg),
+              FilledButton.icon(
+                onPressed: Navigator.of(context).pop,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Iniciar un enfoque'),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
-
-  String _formatShortDate(DateTime date) {
-    return '${date.day}/${date.month}';
-  }
-
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month && date.day == now.day;
-  }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _FocusSummary extends StatelessWidget {
   final List<PomodoroActivity> activities;
 
-  const _SummaryCard({required this.activities});
+  const _FocusSummary({required this.activities});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    final totalActivities = activities.length;
-    final totalCycles = activities.fold(0, (sum, a) => sum + a.cyclesCompleted);
-    final totalMinutes = totalCycles * 25;
-    
-    // Calcular racha actual
+    final minutes = activities.fold<int>(
+      0,
+      (total, activity) => total + activity.totalMinutes,
+    );
+    final focusedDays =
+        activities.map((activity) => activity.dateOnly).toSet().length;
     final streak = _calculateStreak(activities);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _StatItem(
-              icon: Icons.check_circle,
-              value: '$totalActivities',
-              label: 'Completadas',
-              color: colorScheme.primary,
-            ),
-            _StatItem(
-              icon: Icons.timer,
-              value: '${totalMinutes}m',
-              label: 'Enfocado',
-              color: colorScheme.secondary,
-            ),
-            _StatItem(
-              icon: Icons.local_fire_department,
-              value: '$streak',
-              label: 'Racha días',
-              color: Colors.orange,
-            ),
-          ],
+    return Container(
+      padding: EdgeInsets.all(context.spacing.lg),
+      decoration: BoxDecoration(
+        color: context.zentraPalette.specialSurface,
+        borderRadius: BorderRadius.circular(context.radii.large),
+        border: Border.all(
+          color: context.zentraPalette.warmPeach.withValues(alpha: 0.35),
         ),
       ),
-    );
-  }
-
-  int _calculateStreak(List<PomodoroActivity> activities) {
-    if (activities.isEmpty) return 0;
-    
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    
-    // Obtener días únicos con actividades
-    final daysWithActivities = <DateTime>{};
-    for (final activity in activities) {
-      final date = DateTime(
-        activity.startTime.year,
-        activity.startTime.month,
-        activity.startTime.day,
-      );
-      daysWithActivities.add(date);
-    }
-    
-    // Contar racha desde hoy o ayer
-    int streak = 0;
-    var checkDate = today;
-    
-    // Si hoy no hay actividades, empezar desde ayer
-    if (!daysWithActivities.contains(today)) {
-      checkDate = today.subtract(const Duration(days: 1));
-    }
-    
-    while (daysWithActivities.contains(checkDate)) {
-      streak++;
-      checkDate = checkDate.subtract(const Duration(days: 1));
-    }
-    
-    return streak;
-  }
-}
-
-class _StatItem extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-  final Color color;
-
-  const _StatItem({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.outline,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DateHeader extends StatelessWidget {
-  final DateTime date;
-  final int count;
-
-  const _DateHeader({required this.date, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    return Container(
-      color: colorScheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            _formatDateHeader(date),
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-            ),
+            'Tu tiempo presente',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '$count',
-              style: theme.textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onPrimaryContainer,
+          SizedBox(height: context.spacing.md),
+          Wrap(
+            spacing: context.spacing.md,
+            runSpacing: context.spacing.md,
+            children: [
+              _SummaryMetric(
+                value: _formatMinutes(minutes),
+                label: 'enfocado',
+                icon: Icons.timer_outlined,
               ),
-            ),
+              _SummaryMetric(
+                value: '${activities.length}',
+                label: 'sesiones',
+                icon: Icons.check_circle_outline_rounded,
+              ),
+              _SummaryMetric(
+                value: '$focusedDays',
+                label: focusedDays == 1 ? 'día activo' : 'días activos',
+                icon: Icons.calendar_today_outlined,
+              ),
+              _SummaryMetric(
+                value: '$streak',
+                label: streak == 1 ? 'día en ritmo' : 'días en ritmo',
+                icon: Icons.local_fire_department_outlined,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  String _formatDateHeader(DateTime date) {
+  String _formatMinutes(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final hours = minutes ~/ 60;
+    final remainder = minutes % 60;
+    return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
+  }
+
+  int _calculateStreak(List<PomodoroActivity> activities) {
+    final days = activities.map((activity) => activity.dateOnly).toSet();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    
-    if (date == today) return 'Hoy';
-    if (date == yesterday) return 'Ayer';
-    
-    final weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-    final months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
-                    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',];
-    
-    return '${weekdays[date.weekday - 1]} ${date.day} de ${months[date.month - 1]}';
+    var cursor =
+        days.contains(today) ? today : today.subtract(const Duration(days: 1));
+    var streak = 0;
+    while (days.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
   }
 }
 
-class _ActivityTile extends StatelessWidget {
-  final PomodoroActivity activity;
+class _SummaryMetric extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
 
-  const _ActivityTile({required this.activity});
+  const _SummaryMetric({
+    required this.value,
+    required this.label,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            Icons.timer,
-            color: colorScheme.onPrimaryContainer,
-          ),
-        ),
-        title: Text(
-          activity.name,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          '${_formatTime(activity.startTime)} - ${_formatTime(activity.endTime!)}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: colorScheme.outline,
-          ),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.loop,
-                size: 16,
-                color: colorScheme.onSecondaryContainer,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${activity.cyclesCompleted}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSecondaryContainer,
+    final scheme = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 112),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: context.zentraPalette.warmPeach),
+          SizedBox(width: context.spacing.xs),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                 ),
-              ),
-            ],
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
 
-  String _formatTime(DateTime time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+class _FocusWeekChart extends StatelessWidget {
+  final List<Map<String, dynamic>> data;
+
+  const _FocusWeekChart({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final maxMinutes = data.fold<int>(
+      1,
+      (current, entry) => math.max(current, entry['minutes'] as int),
+    );
+
+    return Container(
+      padding: EdgeInsets.all(context.spacing.lg),
+      decoration: BoxDecoration(
+        color: context.zentraPalette.functionalSurface,
+        borderRadius: BorderRadius.circular(context.radii.large),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Últimos 7 días',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          SizedBox(height: context.spacing.lg),
+          MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.6,
+            child: Builder(
+              builder: (context) {
+                final chartTextScale =
+                    MediaQuery.textScalerOf(context).scale(1);
+                return SizedBox(
+                  height: 168 + (chartTextScale - 1) * 48,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final entry in data)
+                        Expanded(
+                          child: _FocusBar(
+                            day: entry['day'] as String,
+                            minutes: entry['minutes'] as int,
+                            maximum: maxMinutes,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusBar extends StatelessWidget {
+  final String day;
+  final int minutes;
+  final int maximum;
+
+  const _FocusBar({
+    required this.day,
+    required this.minutes,
+    required this.maximum,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final height =
+        minutes == 0 ? 5.0 : math.max(12, 112 * minutes / maximum).toDouble();
+    final focus = context.zentraPalette.focus;
+    return Semantics(
+      label: '$day, $minutes minutos de enfoque',
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (minutes > 0)
+            Text(
+              '$minutes',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: focus,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          SizedBox(height: context.spacing.xxs),
+          AnimatedContainer(
+            duration: context.motionPolicy
+                .duration(const Duration(milliseconds: 260)),
+            curve: Curves.easeOutCubic,
+            width: 22,
+            height: height,
+            decoration: BoxDecoration(
+              color: minutes == 0
+                  ? Theme.of(context).colorScheme.surfaceContainerHighest
+                  : focus.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          SizedBox(height: context.spacing.xs),
+          Text(day, style: Theme.of(context).textTheme.labelSmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusTimeline extends StatelessWidget {
+  final List<DailyPomodoroSummary> summaries;
+
+  const _FocusTimeline({required this.summaries});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Sesiones',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        SizedBox(height: context.spacing.md),
+        for (final summary in summaries) ...[
+          _DayHeader(summary: summary),
+          SizedBox(height: context.spacing.xs),
+          for (final activity in summary.activities) ...[
+            _FocusActivityTile(activity: activity),
+            SizedBox(height: context.spacing.xs),
+          ],
+          SizedBox(height: context.spacing.md),
+        ],
+      ],
+    );
+  }
+}
+
+class _DayHeader extends StatelessWidget {
+  final DailyPomodoroSummary summary;
+
+  const _DayHeader({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            summary.formattedDate,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+        Text(
+          '${summary.totalMinutes} min',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FocusActivityTile extends StatelessWidget {
+  final PomodoroActivity activity;
+
+  const _FocusActivityTile({required this.activity});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isCycle = activity.cyclesCompleted > 1;
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(1) > 1.6;
+    final timeRange = activity.endTime == null
+        ? activity.formattedStartTime
+        : '${activity.formattedStartTime}–${activity.formattedEndTime}';
+    final leading = Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: (isCycle
+                ? context.zentraPalette.warmPeach
+                : context.zentraPalette.focus)
+            .withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(context.radii.small),
+      ),
+      child: Icon(
+        isCycle ? Icons.sync_rounded : Icons.center_focus_strong_rounded,
+        color: isCycle
+            ? context.zentraPalette.warmPeach
+            : context.zentraPalette.focus,
+      ),
+    );
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          activity.name.isEmpty ? 'Sesión de enfoque' : activity.name,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        SizedBox(height: context.spacing.xxs),
+        Wrap(
+          spacing: context.spacing.xs,
+          runSpacing: context.spacing.xxs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              timeRange,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+            Text(
+              isCycle
+                  ? '${activity.cyclesCompleted} enfoques'
+                  : 'Enfoque rápido',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+            if (activity.noteId != null)
+              Icon(
+                Icons.description_outlined,
+                size: 16,
+                color: context.zentraPalette.focus,
+                semanticLabel: 'Nota vinculada',
+              ),
+          ],
+        ),
+      ],
+    );
+    final duration = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.spacing.sm,
+        vertical: context.spacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: context.zentraPalette.calmMint,
+        borderRadius: BorderRadius.circular(context.radii.pill),
+      ),
+      child: Text(
+        activity.durationString,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: context.zentraPalette.focus,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
+    );
+
+    return Container(
+      padding: EdgeInsets.all(context.spacing.md),
+      decoration: BoxDecoration(
+        color: context.zentraPalette.functionalSurface,
+        borderRadius: BorderRadius.circular(context.radii.medium),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: useStackedLayout
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    leading,
+                    SizedBox(width: context.spacing.sm),
+                    Expanded(child: details),
+                  ],
+                ),
+                SizedBox(height: context.spacing.sm),
+                duration,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                leading,
+                SizedBox(width: context.spacing.sm),
+                Expanded(child: details),
+                SizedBox(width: context.spacing.sm),
+                duration,
+              ],
+            ),
+    );
   }
 }

@@ -1,16 +1,22 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' as riverpod;
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import '../application/theme_provider.dart';
-import '../application/auth_provider.dart';
-import '../application/habit_provider.dart';
+
 import '../application/pomodoro_provider.dart';
+import '../application/session_controller.dart';
+import '../application/theme_provider.dart';
 import '../infrastructure/notification_service.dart';
 import '../infrastructure/app_logger.dart';
 import 'utils/feedback_utils.dart';
 import 'utils/dialogs.dart';
+import 'utils/backup_passphrase_dialog.dart';
 import 'about_screen.dart';
-import 'support_screen.dart';
+import 'design_tokens.dart';
+import 'widgets/ambient_background.dart';
+import 'widgets/responsive_layout.dart';
 
 /// Pantalla de configuración con Apariencia, Notificaciones y más
 class SettingsScreen extends StatelessWidget {
@@ -23,79 +29,83 @@ class SettingsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Configuración'),
+        title: const Text('Ajustes'),
         centerTitle: false,
       ),
-      body: ListView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+      body: ResponsiveContentFrame(
+        child: ZentraAmbientBackground(
+          child: ListView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: const EdgeInsets.all(20),
+            children: [
+              const _SectionHeader('Apariencia'),
+              const SizedBox(height: 10),
+              _ThemeSelector(isDark: isDark),
+              const SizedBox(height: 24),
+              const _SectionHeader('Notificaciones'),
+              const SizedBox(height: 10),
+              _NotificationsCard(isDark: isDark),
+              const SizedBox(height: 24),
+              const _SectionHeader('Datos'),
+              const SizedBox(height: 10),
+              _DataCard(isDark: isDark),
+              const _CloudSyncSection(),
+              const SizedBox(height: 24),
+              const _SectionHeader('Zentra'),
+              const SizedBox(height: 10),
+              _AboutCard(isDark: isDark),
+              const SizedBox(height: 24),
+              if (kDebugMode) ...[
+                const _SectionHeader('Diagnóstico'),
+                const SizedBox(height: 10),
+                _DeveloperCard(isDark: isDark),
+                const SizedBox(height: 24),
+              ],
+              _LogoutCard(isDark: isDark),
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Apariencia
-          const _SectionHeader(title: 'Apariencia', icon: Icons.palette_rounded),
-          const SizedBox(height: 12),
-          _ThemeSelector(isDark: isDark),
-          
-          const SizedBox(height: 28),
-          
-          // Notificaciones
-          const _SectionHeader(title: 'Notificaciones', icon: Icons.notifications_rounded),
-          const SizedBox(height: 12),
-          _NotificationsCard(isDark: isDark),
-          
-          const SizedBox(height: 28),
-          
-          // Datos
-          const _SectionHeader(title: 'Datos', icon: Icons.storage_rounded),
-          const SizedBox(height: 12),
-          _DataCard(isDark: isDark),
-          
-          const SizedBox(height: 28),
-          
-          // Sobre la app
-          const _SectionHeader(title: 'Más', icon: Icons.info_outline_rounded),
-          const SizedBox(height: 12),
-          _AboutCard(isDark: isDark),
-          
-          const SizedBox(height: 28),
-          
-          // Desarrollador (logs)
-          const _SectionHeader(title: 'Desarrollador', icon: Icons.bug_report_rounded),
-          const SizedBox(height: 12),
-          _DeveloperCard(isDark: isDark),
-          
-          const SizedBox(height: 28),
-          
-          // Cerrar sesión
-          _LogoutCard(isDark: isDark),
-          
-          const SizedBox(height: 40),
-        ],
       ),
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const _SectionHeader({required this.title, required this.icon});
+class _CloudSyncSection extends StatelessWidget {
+  const _CloudSyncSection();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(icon, size: 20, color: colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
+        const SizedBox(height: 24),
+        const _SectionHeader('Cuenta en línea'),
+        const SizedBox(height: 10),
+        Card(
+          key: const ValueKey('settings-cloud-paused'),
+          elevation: 0,
+          color: context.zentraPalette.functionalSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: colorScheme.primary.withValues(alpha: 0.22),
+            ),
+          ),
+          child: ListTile(
+            leading: _SettingIcon(
+              Icons.cloud_off_outlined,
+              colorScheme.primary,
+            ),
+            title: const Text('Cuenta y sincronización en la nube'),
+            subtitle: const Text(
+              'Volverán cuando Zentra local esté completa. '
+              'Tu espacio permanece en este dispositivo.',
+            ),
           ),
         ),
       ],
@@ -103,20 +113,39 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      title,
+      style: theme.textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
 /// Selector de tema compacto
-class _ThemeSelector extends StatelessWidget {
+class _ThemeSelector extends riverpod.ConsumerWidget {
   final bool isDark;
 
   const _ThemeSelector({required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, riverpod.WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
-    final themeProvider = context.watch<ThemeProvider>();
+    final themeMode = ref.watch(themeControllerProvider);
+    final themeController = ref.read(themeControllerProvider.notifier);
 
     return Card(
       elevation: 0,
-      color: isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -130,24 +159,24 @@ class _ThemeSelector extends StatelessWidget {
             _ThemeOption(
               icon: Icons.brightness_auto_rounded,
               label: 'Auto',
-              isSelected: themeProvider.themeMode == AppThemeMode.system,
-              onTap: () => themeProvider.setThemeMode(AppThemeMode.system),
+              isSelected: themeMode == AppThemeMode.system,
+              onTap: () => themeController.setThemeMode(AppThemeMode.system),
               isDark: isDark,
             ),
             const SizedBox(width: 8),
             _ThemeOption(
               icon: Icons.light_mode_rounded,
               label: 'Claro',
-              isSelected: themeProvider.themeMode == AppThemeMode.light,
-              onTap: () => themeProvider.setThemeMode(AppThemeMode.light),
+              isSelected: themeMode == AppThemeMode.light,
+              onTap: () => themeController.setThemeMode(AppThemeMode.light),
               isDark: isDark,
             ),
             const SizedBox(width: 8),
             _ThemeOption(
               icon: Icons.dark_mode_rounded,
               label: 'Oscuro',
-              isSelected: themeProvider.themeMode == AppThemeMode.dark,
-              onTap: () => themeProvider.setThemeMode(AppThemeMode.dark),
+              isSelected: themeMode == AppThemeMode.dark,
+              onTap: () => themeController.setThemeMode(AppThemeMode.dark),
               isDark: isDark,
             ),
           ],
@@ -186,22 +215,45 @@ class _ThemeOption extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected
-                ? colorScheme.primary.withValues(alpha: isDark ? 0.3 : 0.15)
-                : (isDark ? Colors.black : Colors.white),
+            color: isSelected ? null : context.zentraPalette.functionalSurface,
+            gradient: isSelected
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      colorScheme.primary.withValues(
+                        alpha: isDark ? 0.32 : 0.18,
+                      ),
+                      context.zentraPalette.water.withValues(
+                        alpha: isDark ? 0.14 : 0.07,
+                      ),
+                    ],
+                  )
+                : null,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected 
-                  ? colorScheme.primary 
+              color: isSelected
+                  ? colorScheme.primary
                   : colorScheme.outline.withValues(alpha: isDark ? 0.3 : 0.2),
               width: isSelected ? 2 : 1,
             ),
+            boxShadow: isSelected && isDark
+                ? [
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.2),
+                      blurRadius: 16,
+                      spreadRadius: -5,
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             children: [
               Icon(
                 icon,
-                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                color: isSelected
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
                 size: 24,
               ),
               const SizedBox(height: 6),
@@ -210,7 +262,9 @@ class _ThemeOption extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -222,19 +276,22 @@ class _ThemeOption extends StatelessWidget {
 }
 
 /// Card de notificaciones
-class _NotificationsCard extends StatefulWidget {
+class _NotificationsCard extends riverpod.ConsumerStatefulWidget {
   final bool isDark;
 
   const _NotificationsCard({required this.isDark});
 
   @override
-  State<_NotificationsCard> createState() => _NotificationsCardState();
+  riverpod.ConsumerState<_NotificationsCard> createState() =>
+      _NotificationsCardState();
 }
 
-class _NotificationsCardState extends State<_NotificationsCard> {
+class _NotificationsCardState
+    extends riverpod.ConsumerState<_NotificationsCard> {
   final NotificationService _notificationService = NotificationService();
   final SoundService _soundService = SoundService();
-  bool _notificationsEnabled = false; // Default to false until we check
+  bool _morningEnabled = false;
+  bool _eveningEnabled = false;
   bool _pomodoroNotifications = true;
   bool _soundsEnabled = false;
   bool _canScheduleExactAlarms = true;
@@ -251,52 +308,69 @@ class _NotificationsCardState extends State<_NotificationsCard> {
   }
 
   Future<void> _loadSettings() async {
-    final enabled = await _notificationService.areNotificationsEnabled();
-    final pomodoroEnabled = await _notificationService.arePomodoroNotificationsEnabled();
-    final times = await _notificationService.getReminderTimes();
-    final canScheduleExact = await _notificationService.canScheduleExactAlarms();
+    final enabledInSystem =
+        await _notificationService.isSystemNotificationPermissionGranted();
+    final dailySettings = await _notificationService.getDailyReminderSettings();
+    final pomodoroEnabled =
+        await _notificationService.arePomodoroNotificationsEnabled();
+    final canScheduleExact =
+        await _notificationService.canScheduleExactAlarms();
     await _soundService.initialize();
 
     if (mounted) {
       setState(() {
-        _notificationsEnabled = enabled;
+        _morningEnabled = dailySettings.morningEnabled && enabledInSystem;
+        _eveningEnabled = dailySettings.eveningEnabled && enabledInSystem;
         _pomodoroNotifications = pomodoroEnabled;
         _soundsEnabled = _soundService.soundsEnabled;
         _canScheduleExactAlarms = canScheduleExact;
-        _morningHour = times['morningHour'] ?? 9;
-        _morningMinute = times['morningMinute'] ?? 0;
-        _eveningHour = times['eveningHour'] ?? 19;
-        _eveningMinute = times['eveningMinute'] ?? 0;
+        _morningHour = dailySettings.morningHour;
+        _morningMinute = dailySettings.morningMinute;
+        _eveningHour = dailySettings.eveningHour;
+        _eveningMinute = dailySettings.eveningMinute;
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _toggleNotifications(bool value) async {
-    setState(() => _notificationsEnabled = value);
+  Future<bool> _ensureNotificationPermission() async {
+    final alreadyGranted =
+        await _notificationService.isSystemNotificationPermissionGranted();
+    final granted = alreadyGranted ||
+        await _notificationService.requestNotificationPermission();
+    if (granted || !mounted) return granted;
+    showErrorSnackbar(
+      context,
+      'Activa las notificaciones en los ajustes del sistema para usar recordatorios.',
+    );
+    return false;
+  }
 
-    if (value) {
-      final granted = await _notificationService.requestNotificationPermission();
-      if (!granted) {
-        if (!mounted) return;
-        setState(() => _notificationsEnabled = false);
-        showErrorSnackbar(
-          context,
-          'Activa las notificaciones en los ajustes del sistema para usar recordatorios.',
-        );
-        return;
-      }
+  Future<void> _saveDailyReminderSettings() {
+    return _notificationService.setDailyReminderSettings(
+      DailyReminderSettings(
+        morningEnabled: _morningEnabled,
+        morningHour: _morningHour,
+        morningMinute: _morningMinute,
+        eveningEnabled: _eveningEnabled,
+        eveningHour: _eveningHour,
+        eveningMinute: _eveningMinute,
+      ),
+    );
+  }
 
-      await _notificationService.setNotificationsEnabled(true);
-      await _notificationService.scheduleDailyReminders();
+  Future<void> _toggleMorningReminder(bool value) async {
+    if (value && !await _ensureNotificationPermission()) return;
+    if (!mounted) return;
+    setState(() => _morningEnabled = value);
+    await _saveDailyReminderSettings();
+  }
 
-      final canSchedule = await _notificationService.canScheduleExactAlarms();
-      if (mounted) {
-        setState(() => _canScheduleExactAlarms = canSchedule);
-      }
-    } else {
-      await _notificationService.setNotificationsEnabled(false);
-    }
+  Future<void> _toggleEveningReminder(bool value) async {
+    if (value && !await _ensureNotificationPermission()) return;
+    if (!mounted) return;
+    setState(() => _eveningEnabled = value);
+    await _saveDailyReminderSettings();
   }
 
   Future<void> _togglePomodoroNotifications(bool value) async {
@@ -320,7 +394,7 @@ class _NotificationsCardState extends State<_NotificationsCard> {
         _morningHour = time.hour;
         _morningMinute = time.minute;
       });
-      await _notificationService.setMorningReminderTime(time.hour, time.minute);
+      await _saveDailyReminderSettings();
     }
   }
 
@@ -334,7 +408,7 @@ class _NotificationsCardState extends State<_NotificationsCard> {
         _eveningHour = time.hour;
         _eveningMinute = time.minute;
       });
-      await _notificationService.setEveningReminderTime(time.hour, time.minute);
+      await _saveDailyReminderSettings();
     }
   }
 
@@ -348,6 +422,12 @@ class _NotificationsCardState extends State<_NotificationsCard> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final ownerId = ref.watch(activeOwnerIdProvider);
+    final pomodoro =
+        ownerId == null ? null : ref.watch(pomodoroControllerProvider(ownerId));
+    final pomodoroController = ownerId == null
+        ? null
+        : ref.read(pomodoroControllerProvider(ownerId).notifier);
 
     if (_isLoading) {
       return const Card(
@@ -360,51 +440,65 @@ class _NotificationsCardState extends State<_NotificationsCard> {
 
     return Card(
       elevation: 0,
-      color: widget.isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: colorScheme.primary.withValues(alpha: widget.isDark ? 0.3 : 0.2),
+          color:
+              colorScheme.primary.withValues(alpha: widget.isDark ? 0.3 : 0.2),
         ),
       ),
       child: Column(
         children: [
-          SwitchListTile(
-            secondary: _SettingIcon(Icons.notifications_rounded, colorScheme.primary),
-            title: const Text('Recordatorios'),
-            subtitle: const Text('Recordatorios diarios'),
-            value: _notificationsEnabled,
-            onChanged: _toggleNotifications,
+          ListTile(
+            leading: _SettingIcon(
+              Icons.wb_sunny_rounded,
+              context.zentraPalette.warmPeach,
+            ),
+            title: const Text('Mañana'),
+            subtitle: Text(_formatTime(_morningHour, _morningMinute)),
+            onTap: _morningEnabled
+                ? _selectMorningTime
+                : () => _toggleMorningReminder(true),
+            trailing: Switch(
+              value: _morningEnabled,
+              onChanged: _toggleMorningReminder,
+            ),
           ),
-          if (_notificationsEnabled) ...[
-            _Divider(),
-            ListTile(
-              leading: const _SettingIcon(Icons.wb_sunny_rounded, Colors.orange),
-              title: const Text('Mañana'),
-              trailing: Text(_formatTime(_morningHour, _morningMinute)),
-              onTap: _selectMorningTime,
+          _Divider(),
+          ListTile(
+            leading: _SettingIcon(
+              Icons.nights_stay_rounded,
+              context.zentraPalette.sleep,
             ),
-            _Divider(),
-            ListTile(
-              leading: const _SettingIcon(Icons.nights_stay_rounded, Colors.indigo),
-              title: const Text('Tarde'),
-              trailing: Text(_formatTime(_eveningHour, _eveningMinute)),
-              onTap: _selectEveningTime,
+            title: const Text('Noche'),
+            subtitle: Text(_formatTime(_eveningHour, _eveningMinute)),
+            onTap: _eveningEnabled
+                ? _selectEveningTime
+                : () => _toggleEveningReminder(true),
+            trailing: Switch(
+              value: _eveningEnabled,
+              onChanged: _toggleEveningReminder,
             ),
-          ],
+          ),
           _Divider(),
           SwitchListTile(
             secondary: const _SettingIcon(Icons.timer_rounded, Colors.red),
             title: const Text('Pomodoro'),
-            subtitle: const Text('Alertas de sesión'),
+            subtitle: const Text('Al terminar una sesión'),
             value: _pomodoroNotifications,
             onChanged: _togglePomodoroNotifications,
           ),
           // Warning if exact alarms not enabled (Android only)
-          if (!_canScheduleExactAlarms && _pomodoroNotifications) ...[
+          if (Platform.isAndroid &&
+              !_canScheduleExactAlarms &&
+              _pomodoroNotifications) ...[
             _Divider(),
             ListTile(
-              leading: const _SettingIcon(Icons.warning_amber_rounded, Colors.orange),
+              leading: const _SettingIcon(
+                Icons.warning_amber_rounded,
+                Colors.orange,
+              ),
               title: const Text('Alarmas exactas'),
               subtitle: const Text('Requerido para notificaciones precisas'),
               trailing: TextButton(
@@ -414,25 +508,27 @@ class _NotificationsCardState extends State<_NotificationsCard> {
             ),
           ],
           _Divider(),
-          Consumer<PomodoroProvider>(
-            builder: (context, pomodoroProvider, _) {
-              return SwitchListTile(
-                secondary: const _SettingIcon(Icons.alarm_rounded, Colors.orange),
-                title: const Text('Alarma sonora'),
-                subtitle: const Text('Sonido fuerte al terminar Pomodoro'),
-                value: pomodoroProvider.alarmEnabled,
-                onChanged: (value) {
-                  pomodoroProvider.toggleAlarm(value);
-                  triggerHaptic(HapticType.light);
-                },
-              );
-            },
+          SwitchListTile(
+            secondary: const _SettingIcon(
+              Icons.alarm_rounded,
+              Colors.orange,
+            ),
+            title: const Text('Alarma sonora'),
+            subtitle: const Text('Al terminar un bloque'),
+            value: pomodoro?.alarmEnabled ?? false,
+            onChanged: pomodoroController == null
+                ? null
+                : (value) {
+                    pomodoroController.toggleAlarm(value);
+                    triggerHaptic(HapticType.light);
+                  },
           ),
           _Divider(),
           SwitchListTile(
-            secondary: const _SettingIcon(Icons.volume_up_rounded, Colors.purple),
+            secondary:
+                const _SettingIcon(Icons.volume_up_rounded, Colors.purple),
             title: const Text('Sonidos'),
-            subtitle: const Text('Al completar hábitos'),
+            subtitle: const Text('Al completar un hábito'),
             value: _soundsEnabled,
             onChanged: _toggleSounds,
           ),
@@ -440,16 +536,16 @@ class _NotificationsCardState extends State<_NotificationsCard> {
       ),
     );
   }
-  
+
   Future<void> _openExactAlarmsSettings() async {
     await _notificationService.requestExactAlarmsPermission();
     if (!mounted) return;
-    
+
     final canSchedule = await _notificationService.canScheduleExactAlarms();
     if (!mounted) return;
-    
+
     setState(() => _canScheduleExactAlarms = canSchedule);
-    
+
     if (canSchedule) {
       showSuccessSnackbar(context, 'Alarmas exactas activadas');
     }
@@ -457,18 +553,18 @@ class _NotificationsCardState extends State<_NotificationsCard> {
 }
 
 /// Card de datos (exportar/importar)
-class _DataCard extends StatelessWidget {
+class _DataCard extends riverpod.ConsumerWidget {
   final bool isDark;
 
   const _DataCard({required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, riverpod.WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       elevation: 0,
-      color: isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -480,26 +576,31 @@ class _DataCard extends StatelessWidget {
           ListTile(
             leading: const _SettingIcon(Icons.upload_rounded, Colors.blue),
             title: const Text('Exportar respaldo'),
-            subtitle: const Text('Guardar datos'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _exportBackup(context),
+            onTap: () => _exportBackup(context, ref),
           ),
           _Divider(),
           ListTile(
             leading: const _SettingIcon(Icons.download_rounded, Colors.green),
             title: const Text('Importar respaldo'),
-            subtitle: const Text('Restaurar datos'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _importBackup(context),
+            onTap: () => _importBackup(context, ref),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _exportBackup(BuildContext context) async {
-    final authProvider = context.read<AuthProvider>();
-    
+  Future<void> _exportBackup(
+    BuildContext context,
+    riverpod.WidgetRef ref,
+  ) async {
+    final passphrase = await showBackupPassphraseDialog(
+      context,
+      purpose: BackupPassphrasePurpose.export,
+    );
+    if (passphrase == null || !context.mounted) return;
+
     // Show loading
     showDialog(
       context: context,
@@ -514,25 +615,31 @@ class _DataCard extends StatelessWidget {
       ),
     );
 
-    final result = await authProvider.exportBackup();
-    
+    final result = await ref
+        .read(sessionControllerProvider.notifier)
+        .exportBackup(passphrase: passphrase);
+
     if (context.mounted) {
       Navigator.of(context).pop(); // Close loading
-      
+
       if (result != null) {
-        final fileName = result.split('/').last;
-        showSuccessSnackbar(context, 'Guardado en Downloads: $fileName');
+        showSuccessSnackbar(context, 'Respaldo cifrado exportado');
       } else {
         showErrorSnackbar(context, 'Error al exportar respaldo');
       }
     }
   }
 
-  Future<void> _importBackup(BuildContext context) async {
+  Future<void> _importBackup(
+    BuildContext context,
+    riverpod.WidgetRef ref,
+  ) async {
     final confirm = await showConfirmDialog(
       context: context,
       title: '¿Importar respaldo?',
-      message: 'Esto reemplazará todos tus datos actuales.',
+      message:
+          'Esto reemplazará los hábitos, notas y el progreso de esta cuenta. '
+          'Tu sesión y perfil actual se conservarán.',
       confirmText: 'Importar',
       cancelText: 'Cancelar',
       icon: Icons.download_rounded,
@@ -540,10 +647,12 @@ class _DataCard extends StatelessWidget {
 
     if (confirm != true || !context.mounted) return;
 
-    final authProvider = context.read<AuthProvider>();
-    final habitProvider = context.read<HabitProvider>();
-    final pomodoroProvider = context.read<PomodoroProvider>();
-    
+    final passphrase = await showBackupPassphraseDialog(
+      context,
+      purpose: BackupPassphrasePurpose.import,
+    );
+    if (passphrase == null || !context.mounted) return;
+
     // Show loading
     showDialog(
       context: context,
@@ -558,17 +667,17 @@ class _DataCard extends StatelessWidget {
       ),
     );
 
-    final result = await authProvider.importBackup(preserveCurrentUser: true);
-    
+    final result =
+        await ref.read(sessionControllerProvider.notifier).importBackup(
+              passphrase: passphrase,
+              preserveCurrentUser: true,
+            );
+
     if (context.mounted) {
       Navigator.of(context).pop(); // Close loading
-      
+
       if (result == true) {
-        await habitProvider.initialize();
-        await pomodoroProvider.initialize();
-        if (context.mounted) {
-          showSuccessSnackbar(context, 'Respaldo importado correctamente');
-        }
+        showSuccessSnackbar(context, 'Respaldo importado correctamente');
       } else if (result == false) {
         // Only show error if it was an actual error, not a cancellation
         showErrorSnackbar(context, 'Error al importar respaldo');
@@ -603,7 +712,8 @@ class _Divider extends StatelessWidget {
     return Divider(
       height: 1,
       indent: 56,
-      color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+      color:
+          Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
     );
   }
 }
@@ -620,7 +730,7 @@ class _AboutCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -630,25 +740,16 @@ class _AboutCard extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
-            leading: _SettingIcon(Icons.info_outline_rounded, colorScheme.primary),
+            leading:
+                _SettingIcon(Icons.info_outline_rounded, colorScheme.primary),
             title: const Text('Sobre la app'),
-            subtitle: const Text('Historia, feedback y más'),
-            trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+            trailing: Icon(
+              Icons.chevron_right_rounded,
+              color: colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const AboutScreen()),
-              );
-            },
-          ),
-          _Divider(),
-          ListTile(
-            leading: const _SettingIcon(Icons.favorite_rounded, Colors.pink),
-            title: const Text('Apoyar el desarrollo'),
-            subtitle: const Text('Ayuda a mantener la app gratis'),
-            trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SupportScreen()),
               );
             },
           ),
@@ -671,7 +772,7 @@ class _DeveloperCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -681,10 +782,14 @@ class _DeveloperCard extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
-            leading: _SettingIcon(Icons.description_rounded, colorScheme.primary),
+            leading:
+                _SettingIcon(Icons.description_rounded, colorScheme.primary),
             title: const Text('Exportar logs'),
             subtitle: Text('${logger.logCount} entradas guardadas'),
-            trailing: Icon(Icons.share_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+            trailing: Icon(
+              Icons.share_rounded,
+              color: colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
             onTap: () async {
               HapticFeedback.lightImpact();
               if (logger.logCount == 0) {
@@ -699,10 +804,13 @@ class _DeveloperCard extends StatelessWidget {
           ),
           _Divider(),
           ListTile(
-            leading: const _SettingIcon(Icons.delete_sweep_rounded, Colors.orange),
+            leading:
+                const _SettingIcon(Icons.delete_sweep_rounded, Colors.orange),
             title: const Text('Limpiar logs'),
-            subtitle: const Text('Eliminar todos los logs guardados'),
-            trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+            trailing: Icon(
+              Icons.chevron_right_rounded,
+              color: colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
             onTap: () {
               HapticFeedback.lightImpact();
               logger.clearLogs();
@@ -715,19 +823,19 @@ class _DeveloperCard extends StatelessWidget {
   }
 }
 
-/// Card de cerrar sesión y eliminar cuenta
-class _LogoutCard extends StatelessWidget {
+/// Card para salir o eliminar el espacio local.
+class _LogoutCard extends riverpod.ConsumerWidget {
   final bool isDark;
 
   const _LogoutCard({required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, riverpod.WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
       elevation: 0,
-      color: isDark ? Colors.black : Colors.white,
+      color: context.zentraPalette.functionalSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
@@ -739,12 +847,15 @@ class _LogoutCard extends StatelessWidget {
           ListTile(
             leading: _SettingIcon(Icons.logout_rounded, colorScheme.error),
             title: Text(
-              'Cerrar sesión',
+              'Salir de este espacio',
               style: TextStyle(color: colorScheme.error),
             ),
-            subtitle: const Text('Salir de tu cuenta'),
-            trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.error),
-            onTap: () => _showLogoutConfirmation(context),
+            subtitle: const Text(
+              'Tu espacio seguirá guardado en este dispositivo',
+            ),
+            trailing:
+                Icon(Icons.chevron_right_rounded, color: colorScheme.error),
+            onTap: () => _showLogoutConfirmation(context, ref),
           ),
           Divider(
             height: 1,
@@ -752,63 +863,144 @@ class _LogoutCard extends StatelessWidget {
             color: colorScheme.error.withValues(alpha: 0.2),
           ),
           ListTile(
-            leading: _SettingIcon(Icons.delete_forever_rounded, colorScheme.error),
+            leading:
+                _SettingIcon(Icons.delete_forever_rounded, colorScheme.error),
             title: Text(
-              'Eliminar cuenta / Delete Account',
+              'Eliminar espacio de este dispositivo',
               style: TextStyle(color: colorScheme.error),
             ),
-            subtitle: const Text('Permanently delete your account and all data'),
-            trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.error),
-            onTap: () => _showDeleteAccountConfirmation(context),
+            subtitle: const Text(
+              'Elimina sólo la copia local guardada en este dispositivo',
+            ),
+            trailing:
+                Icon(Icons.chevron_right_rounded, color: colorScheme.error),
+            onTap: () => _showDeleteAccountConfirmation(context, ref),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _showLogoutConfirmation(BuildContext context) async {
+  Future<void> _showLogoutConfirmation(
+    BuildContext context,
+    riverpod.WidgetRef ref,
+  ) async {
     final confirm = await showConfirmDialog(
       context: context,
-      title: '¿Cerrar sesión?',
-      message: 'Podrás volver a iniciar sesión con tu cuenta cuando quieras.',
-      confirmText: 'Cerrar sesión',
+      title: '¿Salir de este espacio?',
+      message: 'Tu espacio seguirá guardado en este dispositivo. '
+          'Podrás volver a abrirlo cuando quieras.',
+      confirmText: 'Salir',
       cancelText: 'Cancelar',
       icon: Icons.logout_rounded,
       isDangerous: true,
     );
 
     if (confirm == true && context.mounted) {
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.logout();
-      
-      if (context.mounted) {
-        HapticFeedback.mediumImpact();
-        // Navigate to auth screen and clear stack
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      final ownerId = ref.read(activeOwnerIdProvider);
+      try {
+        if (ownerId != null) {
+          try {
+            await ref
+                .read(pomodoroControllerProvider(ownerId).notifier)
+                .shutdown()
+                .timeout(const Duration(seconds: 2));
+          } catch (error, stackTrace) {
+            AppLogger().error(
+              'SettingsScreen',
+              'Could not stop Pomodoro before leaving local workspace',
+              error,
+              stackTrace,
+            );
+          } finally {
+            ref.invalidate(pomodoroControllerProvider(ownerId));
+          }
+        }
+        await ref.read(sessionControllerProvider.notifier).logout();
+
+        if (context.mounted) {
+          HapticFeedback.mediumImpact();
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } catch (error, stackTrace) {
+        AppLogger().error(
+          'SettingsScreen',
+          'Could not leave local workspace',
+          error,
+          stackTrace,
+        );
+        if (context.mounted) {
+          showErrorSnackbar(
+            context,
+            'No pudimos salir de este espacio. Tus datos siguen disponibles.',
+          );
+        }
       }
     }
   }
 
-  Future<void> _showDeleteAccountConfirmation(BuildContext context) async {
+  Future<void> _showDeleteAccountConfirmation(
+    BuildContext context,
+    riverpod.WidgetRef ref,
+  ) async {
     final confirm = await showConfirmDialog(
       context: context,
-      title: 'Delete Account?',
-      message: 'This action is permanent. All your data, habits, and progress will be deleted. You will not be able to recover this information.',
-      confirmText: 'Delete Account',
-      cancelText: 'Cancel',
+      title: '¿Eliminar este espacio del dispositivo?',
+      message: 'Se eliminarán permanentemente los hábitos, notas y progreso '
+          'guardados en este dispositivo. No se eliminará ninguna cuenta ni '
+          'dato remoto.',
+      confirmText: 'Eliminar espacio',
+      cancelText: 'Cancelar',
       icon: Icons.delete_forever_rounded,
       isDangerous: true,
     );
 
     if (confirm == true && context.mounted) {
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.deleteAccount();
-      
-      if (context.mounted) {
-        HapticFeedback.heavyImpact();
-        showSuccessSnackbar(context, 'Cuenta eliminada');
-        // Navigate to auth screen and clear stack
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      final ownerId = ref.read(activeOwnerIdProvider);
+      try {
+        if (ownerId != null) {
+          try {
+            await ref
+                .read(pomodoroControllerProvider(ownerId).notifier)
+                .shutdown()
+                .timeout(const Duration(seconds: 2));
+          } catch (error, stackTrace) {
+            AppLogger().error(
+              'SettingsScreen',
+              'Could not stop Pomodoro before deleting local workspace',
+              error,
+              stackTrace,
+            );
+          } finally {
+            ref.invalidate(pomodoroControllerProvider(ownerId));
+          }
+        }
+        await ref.read(sessionControllerProvider.notifier).deleteAccount();
+
+        if (context.mounted) {
+          HapticFeedback.heavyImpact();
+          showSuccessSnackbar(
+            context,
+            'Espacio eliminado de este dispositivo',
+          );
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } catch (error, stackTrace) {
+        AppLogger().error(
+          'SettingsScreen',
+          'Could not finish deleting local workspace',
+          error,
+          stackTrace,
+        );
+        if (ownerId != null) {
+          ref.invalidate(pomodoroControllerProvider(ownerId));
+        }
+        if (context.mounted) {
+          showErrorSnackbar(
+            context,
+            'No pudimos completar la eliminación. Reintenta para terminar.',
+          );
+        }
       }
     }
   }
