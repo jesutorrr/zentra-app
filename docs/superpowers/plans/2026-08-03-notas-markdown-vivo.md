@@ -141,6 +141,17 @@ void main() {
     expect(open.blocks.single.codeLines, ['sin cerrar']);
   });
 
+  test('keeps the closing fence line verbatim', () {
+    final document = MarkdownDocument.parse('````dart\nvar a = 1;\n  ````   ');
+    expect(document.blocks.single.fenceClose, '  ````   ');
+  });
+
+  test('keeps carriage returns inside the line instead of dropping them', () {
+    final document = MarkdownDocument.parse('- uno\r\n- dos\r\n');
+    expect(document.blocks.first.text, 'uno\r');
+    expect(document.blocks[1].text, 'dos\r');
+  });
+
   test('an empty note still has one editable block', () {
     expect(MarkdownDocument.parse('').blocks.single.type,
         MarkdownBlockType.paragraph);
@@ -191,7 +202,11 @@ class MarkdownBlock {
   final int headingLevel;
   final String language;
   final List<String> codeLines;
-  final bool fenceClosed;
+
+  /// The literal closing line of a code fence, or null when the fence was
+  /// never closed. Stored whole because its indentation, backtick count and
+  /// trailing spaces are all part of the source and must survive a round trip.
+  final String? fenceClose;
 
   const MarkdownBlock({
     required this.type,
@@ -202,11 +217,13 @@ class MarkdownBlock {
     this.headingLevel = 0,
     this.language = '',
     this.codeLines = const [],
-    this.fenceClosed = true,
+    this.fenceClose,
   });
 
   const MarkdownBlock.paragraph([String text = ''])
       : this(type: MarkdownBlockType.paragraph, text: text);
+
+  bool get fenceClosed => fenceClose != null;
 
   /// Indentation level, capped at three. A tab counts as two spaces.
   int get indentLevel {
@@ -232,7 +249,7 @@ class MarkdownBlock {
     int? headingLevel,
     String? language,
     List<String>? codeLines,
-    bool? fenceClosed,
+    String? fenceClose,
   }) {
     return MarkdownBlock(
       type: type ?? this.type,
@@ -243,7 +260,7 @@ class MarkdownBlock {
       headingLevel: headingLevel ?? this.headingLevel,
       language: language ?? this.language,
       codeLines: codeLines ?? this.codeLines,
-      fenceClosed: fenceClosed ?? this.fenceClosed,
+      fenceClose: fenceClose ?? this.fenceClose,
     );
   }
 
@@ -258,7 +275,7 @@ class MarkdownBlock {
         other.checked == checked &&
         other.headingLevel == headingLevel &&
         other.language == language &&
-        other.fenceClosed == fenceClosed &&
+        other.fenceClose == fenceClose &&
         _sameLines(other.codeLines, codeLines);
   }
 
@@ -271,7 +288,7 @@ class MarkdownBlock {
         checked,
         headingLevel,
         language,
-        fenceClosed,
+        fenceClose,
         Object.hashAll(codeLines),
       );
 
@@ -284,14 +301,17 @@ class MarkdownBlock {
   }
 }
 
+// `[\s\S]*` instead of `.*` on every tail group: Dart's `.` excludes carriage
+// returns, so a CRLF source would fall through to raw paragraphs. Capturing the
+// `\r` as part of the tail keeps both the block type and the exact bytes.
 final _leadingPattern = RegExp(r'^[ \t]*');
-final _headingPattern = RegExp(r'^(#{1,3}[ \t]+)(.*)$');
-final _dividerPattern = RegExp(r'^(-{3,}|\*{3,}|_{3,})[ \t]*$');
-final _fencePattern = RegExp('^(`{3,})(.*)\$');
-final _checkPattern = RegExp(r'^([-*][ \t]+\[[ xX]\][ \t]+)(.*)$');
-final _bulletPattern = RegExp(r'^([-*][ \t]+)(.*)$');
-final _numberedPattern = RegExp(r'^(\d+[.)][ \t]+)(.*)$');
-final _quotePattern = RegExp(r'^(>[ \t]?)(.*)$');
+final _headingPattern = RegExp(r'^(#{1,3}[ \t]+)([\s\S]*)$');
+final _dividerPattern = RegExp(r'^(-{3,}|\*{3,}|_{3,})[ \t]*\r?$');
+final _fencePattern = RegExp('^(`{3,})([\\s\\S]*)\$');
+final _checkPattern = RegExp(r'^([-*][ \t]+\[[ xX]\][ \t]+)([\s\S]*)$');
+final _bulletPattern = RegExp(r'^([-*][ \t]+)([\s\S]*)$');
+final _numberedPattern = RegExp(r'^(\d+[.)][ \t]+)([\s\S]*)$');
+final _quotePattern = RegExp(r'^(>[ \t]?)([\s\S]*)$');
 final _unsupportedPattern = RegExp(r'^(#{4,}[ \t]|\||!\[|<)');
 
 /// A parsed note body. Blocks map one to one with source lines, except code
@@ -317,13 +337,13 @@ class MarkdownDocument {
       if (fence != null) {
         final marker = fence.group(1)!;
         final codeLines = <String>[];
-        var closed = false;
+        String? closingLine;
         index++;
         while (index < lines.length) {
           final candidate = lines[index].trimLeft();
           if (candidate.startsWith(marker) &&
               candidate.substring(marker.length).trim().isEmpty) {
-            closed = true;
+            closingLine = lines[index];
             index++;
             break;
           }
@@ -337,7 +357,7 @@ class MarkdownDocument {
             prefix: marker,
             language: fence.group(2)!,
             codeLines: List.unmodifiable(codeLines),
-            fenceClosed: closed,
+            fenceClose: closingLine,
           ),
         );
         continue;
@@ -470,6 +490,11 @@ const _corpus = <String>[
   '#### encabezado nivel cuatro\n<div>html</div>\n![img](x.png)',
   '---\n***\n___',
   'Texto con # numeral a media línea y - guion suelto',
+  '- espacios al final   \n## encabezado con cola  \n',
+  '````dart\nvar a = 1;\n  ````   \ndespués',
+  '```\n```\n```\ntres cercas seguidas',
+  '- [ ] uno\r\n- [x] dos\r\n## crlf\r\n',
+  '\t- viñeta con tabulador\n\t\t1. numerada anidada',
 ];
 
 void main() {
@@ -544,7 +569,7 @@ Agrega a `MarkdownBlock`:
         ..write('\n')
         ..write(line);
     }
-    if (fenceClosed) buffer.write('\n$leading$prefix');
+    if (fenceClose != null) buffer.write('\n$fenceClose');
     return buffer.toString();
   }
 

@@ -69,6 +69,18 @@ void main() {
     expect(open.blocks.single.codeLines, ['sin cerrar']);
   });
 
+  test('keeps the closing fence line verbatim', () {
+    final document = MarkdownDocument.parse('````dart\nvar a = 1;\n  ````   ');
+    expect(document.blocks.single.fenceClose, '  ````   ');
+  });
+
+  test('keeps carriage returns inside the line instead of dropping them', () {
+    final document = MarkdownDocument.parse('- uno\r\n- dos\r\n');
+    expect(document.blocks.first.type, MarkdownBlockType.bulletItem);
+    expect(document.blocks.first.text, 'uno\r');
+    expect(document.blocks[1].text, 'dos\r');
+  });
+
   test('an empty note still has one editable block', () {
     expect(MarkdownDocument.parse('').blocks.single.type,
         MarkdownBlockType.paragraph);
