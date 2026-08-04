@@ -194,24 +194,36 @@ DocumentEdit applyBlockCommand(
   final block = document.blocks[caret.blockIndex];
 
   if (command == NoteBlockCommand.divider) {
-    final next = document
-        .insertBlock(
-          caret.blockIndex + 1,
-          const MarkdownBlock(
-            type: MarkdownBlockType.divider,
-            prefix: '---',
-          ),
-        )
-        .insertBlock(caret.blockIndex + 2, const MarkdownBlock.paragraph());
+    final below = caret.blockIndex + 1;
+    // Only open a line under the rule when there is not an empty one already,
+    // so two taps do not leave a growing stack of blank paragraphs.
+    final landsOnEmpty = _holdsBlock(document, below) &&
+        _isEmptyParagraph(document.blocks[below]);
+    var next = document.insertBlock(
+      below,
+      const MarkdownBlock(
+        type: MarkdownBlockType.divider,
+        prefix: '---',
+      ),
+    );
+    if (!landsOnEmpty) {
+      next = next.insertBlock(below + 1, const MarkdownBlock.paragraph());
+    }
+    // An unclosed fence above would swallow the rule and the line under it.
+    if (!_survivesReparse(next)) return _unchanged(document, caret, block);
     return DocumentEdit(
       next,
-      DocumentCaret(blockIndex: caret.blockIndex + 2, offset: 0),
+      DocumentCaret(blockIndex: below + 1, offset: 0),
     );
   }
 
   if (command == NoteBlockCommand.code) {
+    final toggled = _toggleFence(block);
+    if (toggled == null) return _unchanged(document, caret, block);
+    final next = document.replaceBlock(caret.blockIndex, toggled);
+    if (!_survivesReparse(next)) return _unchanged(document, caret, block);
     return DocumentEdit(
-      document.replaceBlock(caret.blockIndex, _toggleFence(block)),
+      next,
       DocumentCaret(blockIndex: caret.blockIndex, offset: 0),
     );
   }
@@ -219,9 +231,11 @@ DocumentEdit applyBlockCommand(
   // A fence spans several source lines and a raw block keeps an unsupported
   // line verbatim. Rebuilding either one from a prefix and `text` would drop
   // the code, the closing marker or the characters we promised not to touch.
+  // The `code` command above is the exception: it wraps the whole source line,
+  // so a raw one goes into the fence verbatim and comes back out unchanged.
   if (block.type == MarkdownBlockType.codeFence ||
       block.type == MarkdownBlockType.raw) {
-    return DocumentEdit(document, caret);
+    return _unchanged(document, caret, block);
   }
 
   final nextPrefix = _nextPrefixFor(block, command);
@@ -236,10 +250,10 @@ DocumentEdit applyBlockCommand(
   // Dropping the marker off a line whose text starts with three backticks
   // opens a fence, and an open fence reads every block below it as code.
   if (rebuilt.type == MarkdownBlockType.codeFence) {
-    return DocumentEdit(document, caret);
+    return _unchanged(document, caret, block);
   }
   final next = document.replaceBlock(caret.blockIndex, rebuilt);
-  if (!_survivesReparse(next)) return DocumentEdit(document, caret);
+  if (!_survivesReparse(next)) return _unchanged(document, caret, block);
   final length = rebuilt.toSourceLine().length;
   final lower = _clamp(block.leading.length, length);
   // The divider's prefix stays on the line as text, so nothing was removed in
@@ -258,15 +272,47 @@ DocumentEdit applyBlockCommand(
   );
 }
 
-/// Wraps [block] in a fence, or unwraps the one it already is.
+/// The document as it was, with the caret pinned inside [block]. Every path
+/// that acts clamps the caret, so the ones that refuse do too rather than
+/// handing back an offset that points past the end of the line.
+DocumentEdit _unchanged(
+  MarkdownDocument document,
+  DocumentCaret caret,
+  MarkdownBlock block,
+) {
+  return DocumentEdit(
+    document,
+    DocumentCaret(
+      blockIndex: caret.blockIndex,
+      offset: _clamp(caret.offset, block.toSourceLine().length),
+    ),
+  );
+}
+
+bool _isEmptyParagraph(MarkdownBlock block) =>
+    block.type == MarkdownBlockType.paragraph && block.toSourceLine().isEmpty;
+
+/// Wraps [block] in a fence, or unwraps the one it already is. Null when the
+/// fence cannot be unwrapped without losing source.
 ///
 /// The fence is always closed: an open one would swallow every block below it
-/// the next time the note is parsed.
-MarkdownBlock _toggleFence(MarkdownBlock block) {
+/// the next time the note is parsed. Only a fence shaped like the one this
+/// command produces is unwrapped, because that is the only shape where
+/// toggling back returns the block the user started from: folding several code
+/// lines into one would delete the newlines between them, and dropping the
+/// language would delete the word typed right after the marker. Neither comes
+/// back, so a fence the user wrote by hand is left alone instead.
+MarkdownBlock? _toggleFence(MarkdownBlock block) {
   if (block.type == MarkdownBlockType.codeFence) {
+    if (block.codeLines.length != 1 || block.language.isNotEmpty) return null;
     // Parsed rather than assumed to be a paragraph so the resulting block
     // still describes the line it serializes.
-    return MarkdownDocument.parse(block.codeLines.join(' ')).blocks.first;
+    final unwrapped =
+        MarkdownDocument.parse(block.codeLines.single).blocks.first;
+    // A fenced line that is itself a run of backticks would come out of a
+    // closed fence as an open one.
+    if (unwrapped.type == MarkdownBlockType.codeFence) return null;
+    return unwrapped;
   }
   return MarkdownBlock(
     type: MarkdownBlockType.codeFence,
@@ -297,6 +343,9 @@ String _nextPrefixFor(MarkdownBlock block, NoteBlockCommand command) {
       return block.type == MarkdownBlockType.quote ? '' : '> ';
     case NoteBlockCommand.code:
     case NoteBlockCommand.divider:
+      // Unreachable: both commands are answered in full before this is
+      // called. They stay named so the switch remains exhaustive and a new
+      // command cannot be added without deciding what prefix it carries.
       return block.prefix;
   }
 }
@@ -341,11 +390,18 @@ DocumentEdit wrapSelection(
       ),
     );
   }
+  // A backwards drag hands `end` in before `start`. Normalizing here keeps the
+  // range usable instead of collapsing it, so the domain API stays safe for a
+  // caller that does not sort the selection first.
+  final rangeStart = start <= end ? start : end;
+  final rangeEnd = start <= end ? end : start;
+
   final block = document.blocks[blockIndex];
   final source = block.toSourceLine();
   final marker = _inlineMarkers[style];
   // A fence spans several lines and a raw block holds an unsupported one, so a
-  // single pair of offsets cannot address either without losing source.
+  // single pair of offsets cannot address either without losing source. A link
+  // has no marker of this shape either: it needs a target, not a wrap.
   if (marker == null ||
       block.type == MarkdownBlockType.codeFence ||
       block.type == MarkdownBlockType.raw) {
@@ -353,19 +409,32 @@ DocumentEdit wrapSelection(
       document,
       DocumentCaret(
         blockIndex: blockIndex,
-        offset: _clamp(end, source.length),
+        offset: _clamp(rangeEnd, source.length),
       ),
     );
   }
 
   // The block marker is not styled text: wrapping it would demote a heading to
   // a paragraph the moment the line is parsed again.
-  final from = _clampRange(
-    start,
+  var from = _clampRange(
+    rangeStart,
     _clamp(block.leading.length + block.prefix.length, source.length),
     source.length,
   );
-  final to = _clampRange(end, from, source.length);
+  var to = _clampRange(rangeEnd, from, source.length);
+  // Emphasis has to hug its content: the tokenizer refuses a marker followed
+  // by a space and one preceded by a space, so a selection that swallowed
+  // either would read back as literal asterisks. A double tap on a word takes
+  // the trailing space with it, which makes this the common case rather than
+  // the odd one. A code span is exempt, a backtick may sit against anything.
+  if (marker != '`') {
+    while (from < to && _isBlank(source[from])) {
+      from++;
+    }
+    while (to > from && _isBlank(source[to - 1])) {
+      to--;
+    }
+  }
   if (from == to) {
     return DocumentEdit(
       document,
@@ -379,13 +448,13 @@ DocumentEdit wrapSelection(
 
   final String rebuilt;
   final int caretEnd;
-  if (before.endsWith(marker) && after.startsWith(marker)) {
+  if (_endsWithMarker(before, marker) && _startsWithMarker(after, marker)) {
     rebuilt = '${before.substring(0, before.length - marker.length)}'
         '$selected${after.substring(marker.length)}';
     caretEnd = to - marker.length;
   } else if (selected.length > marker.length * 2 &&
-      selected.startsWith(marker) &&
-      selected.endsWith(marker)) {
+      _startsWithMarker(selected, marker) &&
+      _endsWithMarker(selected, marker)) {
     // The selection swallowed the markers it should toggle off.
     rebuilt = '$before'
         '${selected.substring(marker.length, selected.length - marker.length)}'
@@ -397,13 +466,18 @@ DocumentEdit wrapSelection(
   }
 
   final rebuiltBlock = MarkdownDocument.parse(rebuilt).blocks.first;
+  // Markers that add up to a fence or to a rule stop being text: the fence
+  // reads every block below it as code and the rule renders nothing at all.
+  // Neither can be undone from here, because the block that replaced the line
+  // no longer offers a selection to toggle.
   final unchanged = DocumentEdit(
     document,
     DocumentCaret(blockIndex: blockIndex, offset: to),
   );
-  // Markers that add up to three backticks stop being text: the fence they
-  // open reads every block below it as code.
-  if (rebuiltBlock.type == MarkdownBlockType.codeFence) return unchanged;
+  if (rebuiltBlock.type == MarkdownBlockType.codeFence ||
+      rebuiltBlock.type == MarkdownBlockType.divider) {
+    return unchanged;
+  }
   final next = document.replaceBlock(blockIndex, rebuiltBlock);
   if (!_survivesReparse(next)) return unchanged;
 
@@ -412,6 +486,29 @@ DocumentEdit wrapSelection(
     DocumentCaret(blockIndex: blockIndex, offset: caretEnd),
   );
 }
+
+/// True when [text] ends with [marker] and that marker is not the tail of a
+/// longer run of the same character.
+///
+/// Without the run check a single `*` claims one half of the `**` that makes a
+/// word bold, so adding italics to a bold word would unbold it instead.
+bool _endsWithMarker(String text, String marker) {
+  if (!text.endsWith(marker)) return false;
+  final neighbour = text.length - marker.length - 1;
+  return neighbour < 0 || text[neighbour] != marker[0];
+}
+
+/// True when [text] starts with [marker] and that marker is not the head of a
+/// longer run of the same character. See [_endsWithMarker].
+bool _startsWithMarker(String text, String marker) {
+  if (!text.startsWith(marker)) return false;
+  final neighbour = marker.length;
+  return neighbour >= text.length || text[neighbour] != marker[0];
+}
+
+/// The tokenizer's own notion of a space, so a tab or a non breaking space
+/// blocks a marker exactly the way a plain space does.
+bool _isBlank(String character) => character.trim().isEmpty;
 
 String _continuationPrefix(MarkdownBlock block) {
   switch (block.type) {

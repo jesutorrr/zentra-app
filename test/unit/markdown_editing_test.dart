@@ -3,6 +3,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zentra/domain/markdown_document.dart';
 import 'package:zentra/domain/markdown_editing.dart';
 
+// Lines that are awkward to rebuild: three backticks open a fence as soon as
+// they reach the start of a line, and a rule keeps all of its characters in
+// `prefix` where a rebuild from `text` cannot see them.
+const _corpus = <String>[
+  '',
+  'texto',
+  '# Título',
+  '- lista',
+  '1. uno',
+  '- [ ] tarea',
+  '> cita',
+  '  - anidada',
+  '---',
+  '- ```',
+  '> ```',
+  'usa ``` para codigo',
+  '``` suelto',
+  '| tabla |',
+  '```\ncodigo\n```',
+];
+
+/// True when [document] parses back to exactly itself. Anything that fails
+/// this looks right on screen and comes back different after a save.
+bool reparsesToItself(MarkdownDocument document) {
+  final reparsed = MarkdownDocument.parse(document.serialize());
+  if (reparsed.blocks.length != document.blocks.length) return false;
+  for (var i = 0; i < document.blocks.length; i++) {
+    if (reparsed.blocks[i] != document.blocks[i]) return false;
+  }
+  return true;
+}
+
 void main() {
   test('enter splits a paragraph at the caret', () {
     final edit = splitBlock(
@@ -230,5 +262,42 @@ void main() {
     );
     expect(edit.document.serialize(), source);
     expect(edit.caret, const DocumentCaret(blockIndex: 0, offset: 3));
+  });
+
+  test('a split leaves a document that parses back to itself', () {
+    final failures = <String>[];
+    for (final line in _corpus) {
+      final document = MarkdownDocument.parse('$line\nsegunda\ntercera');
+      final length = document.blocks.first.toSourceLine().length;
+      for (var offset = 0; offset <= length + 2; offset++) {
+        final edit = splitBlock(
+          document,
+          DocumentCaret(blockIndex: 0, offset: offset),
+        );
+        if (!reparsesToItself(edit.document)) {
+          failures.add('split of "$line" at $offset');
+        }
+      }
+    }
+    expect(failures, isEmpty);
+  });
+
+  test('a merge and an indent leave a document that parses back', () {
+    final failures = <String>[];
+    for (final line in _corpus) {
+      final document = MarkdownDocument.parse('primera\n$line\nsegunda');
+      const caret = DocumentCaret(blockIndex: 1, offset: 0);
+      final merged = mergeWithPrevious(document, caret);
+      if (!reparsesToItself(merged.document)) {
+        failures.add('merge of "$line"');
+      }
+      for (final increase in const [true, false]) {
+        final indented = changeIndent(document, caret, increase: increase);
+        if (!reparsesToItself(indented.document)) {
+          failures.add('indent of "$line" increase: $increase');
+        }
+      }
+    }
+    expect(failures, isEmpty);
   });
 }
