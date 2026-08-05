@@ -42,13 +42,13 @@ cada diálogo ni cada estado de carga.
 | 12 | Historial de enfoque | Pendiente | Revisar jerarquía y estados vacíos. |
 | 13 | Progreso y logros | Activa | Pulso Vivo 3.0 aprobado por Uri en Design Lab; pendiente adaptador productivo, goldens y Screen Reviewer. |
 | 14 | Historial de actividad | Pendiente | Revisar actividad, archivo y filtros. |
-| 15 | Calendario | Pendiente | Unificar resumen, leyenda y detalle diario. |
+| 15 | Calendario | Activa | Tiempo Vivo 1.0 aprobado como dirección y montado en Design Lab; pendiente aprobación de los renders Flutter, adaptador productivo y Screen Reviewer. |
 | 16 | Perfil | Pendiente | Reducir cards sin esconder identidad ni cuenta. |
 | 17 | Ajustes | Activa | Cuenta y sincronización sustituidas por estado local-only; pendiente Release física y aprobación de Uri. |
 | 18 | Acerca de | Pendiente | Compactar información legal y de versión. |
 | 19 | Soporte | Pendiente | Confirmar si sigue como pantalla independiente. |
 
-Estado del corte: 3 superficies aprobadas, 9 activas y 7 pendientes. Las
+Estado del corte: 3 superficies aprobadas, 10 activas y 6 pendientes. Las
 superficies activas cuentan como pendientes hasta cerrar todos sus gates.
 
 ## Corte activo: Focus Portal + Silencio
@@ -228,6 +228,23 @@ Verificación: `flutter analyze` sin issues sobre todo el código versionado,
 `** BUILD SUCCEEDED **` en Release para `iphoneos`. Las dos pruebas que fallan en
 la corrida completa pertenecen a prototipos sin versionar de otra sesión
 (`progress_pulse`, `calendar_time_live`) y no tocan nada de este trabajo.
+
+Release `2.0.0 (25)` con las cuatro correcciones instalada y lanzada en
+«jesutorr's iPhone» (iOS 26.6) el 5 de agosto de 2026. El `.appex` del widget
+corre como proceso propio en el dispositivo, así que la Live Activity rediseñada
+está desplegada, no sólo compilada. Sigue pendiente el smoke nativo que sólo
+puede dar Uri: background, force quit, notificación, Live Activity y Dynamic
+Island vistos en la pantalla real.
+
+Nota de toolchain, porque costó tres builds fallidos: dos compilaciones
+simultáneas del mismo proyecto corrompen el `build.db` de Xcode y el error
+miente. Aparece como `disk I/O error` de SQLite, o como un `.d`, un
+`OutputFileMap.json` o un `const_extract_protocols.json` que no se puede abrir, y
+con el volumen al 96% invita a diagnosticar disco lleno. No lo era: el log del
+sistema no reportaba ni un solo error de E/S, y el culpable era un `flutter drive`
+del Screen Reviewer corriendo en paralelo desde otra sesión sobre este mismo
+repo. En cuanto terminó, el build pasó en 49.8 s sin cambiar nada. Antes de
+borrar DerivedData conviene correr `pgrep -fl "flutter_tools|xcodebuild"`.
 
 ## Corte activo: nube estacionada
 
