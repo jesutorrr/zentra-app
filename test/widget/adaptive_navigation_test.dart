@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zentra/application/pomodoro_provider.dart';
 import 'package:zentra/domain/models.dart';
+import 'package:zentra/domain/pomodoro_activity.dart';
 import 'package:zentra/infrastructure/notification_service.dart';
 import 'package:zentra/presentation/auth_screen.dart';
 import 'package:zentra/presentation/habits_list_screen.dart';
@@ -401,6 +402,13 @@ void main() {
     final startButton = find.byKey(const ValueKey('pomodoro_start_button'));
     expect(quickMode, findsOneWidget);
     expect(cycleMode, findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('focus_portal_headline')),
+      findsOneWidget,
+    );
+    expect(find.text('Haz espacio para\nuna sola cosa'), findsOneWidget);
+    expect(find.text('Enfoque'), findsNothing);
+    expect(find.text('Entrar'), findsOneWidget);
     expect(startButton, findsOneWidget);
     expect(startButton.hitTestable(), findsOneWidget);
     expect(tester.getRect(startButton).bottom, lessThanOrEqualTo(844));
@@ -412,15 +420,23 @@ void main() {
 
     await tester.tap(cycleMode);
     await tester.pump();
-    expect(find.text('Iniciar ciclo de 4 sesiones'), findsOneWidget);
+    expect(find.textContaining('4 enfoques · descansos'), findsOneWidget);
     expect(startButton.hitTestable(), findsOneWidget);
     await tester.tap(startButton);
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 700));
     expect(
       find.byKey(const ValueKey('focus_session_active')),
       findsOneWidget,
     );
-    expect(find.text('Sesión de enfoque'), findsWidgets);
+    expect(find.text('ENFOQUE · 1 DE 4'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('focus_work_immersion')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('pomodoro_timer_progress')),
+      findsOneWidget,
+    );
     final reset = find.byKey(const ValueKey('pomodoro_reset'));
     final pause = find.byKey(const ValueKey('pomodoro_pause_resume'));
     final cancel = find.byKey(const ValueKey('pomodoro_cancel_activity'));
@@ -436,9 +452,27 @@ void main() {
       lessThan(2),
     );
     expect(tester.takeException(), isNull);
-    await tester.tap(cancel);
+
+    await tester.tap(pause);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Continuar'), findsOneWidget);
+    expect(find.byKey(const ValueKey('focus_pause_gap')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Salir del enfoque'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('¿Cancelar ciclo?'), findsOneWidget);
+    expect(find.text('¿Salir del enfoque?'), findsOneWidget);
+    expect(find.text('Salir y conservar'), findsOneWidget);
+    expect(find.text('Terminar sesión'), findsOneWidget);
+    await tester.tap(find.text('Seguir aquí'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    await tester.tap(cancel);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('¿Terminar este enfoque?'), findsOneWidget);
+    expect(find.text('Esta sesión no sumará minutos.'), findsOneWidget);
     await tester.tap(
       find.byKey(const ValueKey('pomodoro_cancel_confirm')),
     );
@@ -462,7 +496,100 @@ void main() {
     expect(tester.getSize(launcher).width, greaterThan(800));
     expect(tester.getCenter(launcher).dx, closeTo(1024 / 2, 1));
     expect(startButton, findsOneWidget);
+
+    // On a tablet the portal claims the middle of the window instead of hugging
+    // the top edge and leaving the lower half empty. It centers in the space
+    // below the top bar, so its middle lands in the middle third of the window
+    // rather than exactly on the window center.
+    final portalTop =
+        tester.getRect(find.byKey(const ValueKey('focus_portal_headline'))).top;
+    final portalBottom = tester
+        .getRect(find.byKey(const ValueKey('pomodoro_optional_context')))
+        .bottom;
+    expect((portalTop + portalBottom) / 2, closeTo(1366 / 2, 1366 / 6));
+    expect(portalTop, greaterThan(1366 * 0.25));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Focus carries a typed session name into the history',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    await tester.pumpWidget(await buildApp(const PomodoroScreen()));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Naming a session is the only way to tell two entries apart in the
+    // history, so the field has to be reachable from the launcher and its text
+    // has to survive all the way into the running session.
+    final toggle = find.byKey(const ValueKey('pomodoro_optional_context'));
+    expect(toggle, findsOneWidget);
+    expect(find.text('Nombrar esta sesión'), findsOneWidget);
+
+    await tester.ensureVisible(toggle);
+    await tester.pump();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    final field = find.byKey(const ValueKey('pomodoro_activity_field'));
+    expect(field, findsOneWidget);
+    expect(find.text('Nombre de la sesión'), findsOneWidget);
+
+    // On a phone the field opens below the fold, so revealing it has to also
+    // focus it: otherwise the user taps the button and nothing appears to
+    // happen until they scroll.
+    expect(tester.widget<TextField>(field).focusNode?.hasFocus, isTrue);
+
+    // The field must not change height when it gains focus or text: it sits in
+    // an AnimatedSize, and a jump there overflowed the portal's sliver.
+    final emptyHeight = tester.getSize(field).height;
+    await tester.enterText(field, 'Estudiar Química');
+    await tester.pumpAndSettle();
+    expect(tester.getSize(field).height, emptyHeight);
+
+    // Collapsing the field animates the portal's height, and mid-animation the
+    // column must not paint taller than the space the sliver reserved.
+    await tester.tap(toggle);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('pomodoro_start_button')));
+    // Entering the portal waits out its own transition, then the engine persists
+    // the session before the immersive scene replaces the launcher, so the scene
+    // is waited for rather than assumed after a fixed number of frames.
+    final controls = find.byKey(const ValueKey('pomodoro_cancel_activity'));
+    for (var i = 0; i < 20 && controls.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(controls, findsOneWidget);
+
+    final state = currentHarness!.pomodoroController.state;
+    expect(state.quickSessionName, 'Estudiar Química');
+    expect(state.sessionLabel, 'Estudiar Química');
+    // Scoped to the running session: the launcher's field still holds the same
+    // text while the two scenes cross-fade.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('focus_session_active')),
+        matching: find.text('Estudiar Química'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    // Leave no timer running behind this test.
+    await tester.tap(controls);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('pomodoro_cancel_confirm')));
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets(
@@ -513,6 +640,12 @@ void main() {
       findsNothing,
     );
     expect(find.text('Gira el dial. De 5 a 60 minutos.'), findsOneWidget);
+    final semantics = tester.getSemantics(
+      find.byKey(const ValueKey('pomodoro_duration_dial')),
+    );
+    expect(semantics.value, '25 minutos');
+    expect(semantics.increasedValue, '30 minutos');
+    expect(semantics.decreasedValue, '20 minutos');
     expect(tester.takeException(), isNull);
   });
 
@@ -527,6 +660,45 @@ void main() {
 
     expect(find.text('05:00'), findsOneWidget);
     expect(find.text('Descanso corto'), findsWidgets);
+    expect(find.text('Suelta los hombros'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('focus_rest_immersion')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Pomodoro completion closes the circle without a dialog card',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    var closed = false;
+    await tester.pumpWidget(
+      await buildApp(
+        FocusCompletionScene(
+          activity: PomodoroActivity(
+            id: 'completed-focus',
+            name: 'Repasar Álgebra lineal',
+            startTime: DateTime(2026, 8, 4, 12),
+            endTime: DateTime(2026, 8, 4, 12, 25),
+            cyclesCompleted: 1,
+            totalMinutes: 25,
+            isCompleted: true,
+          ),
+          onClose: () => closed = true,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey('focus_completion_dialog')),
+      findsOneWidget,
+    );
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Enfoque completado'), findsOneWidget);
+    expect(find.text('Una cosa menos en tu cabeza.'), findsOneWidget);
+    await tester.tap(find.text('Hecho'));
+    expect(closed, isTrue);
     expect(tester.takeException(), isNull);
   });
 

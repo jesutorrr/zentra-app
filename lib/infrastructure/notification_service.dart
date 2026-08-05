@@ -683,10 +683,14 @@ class NotificationService implements HabitReminderService {
     }
   }
 
-  /// Programa notificación cuando termine el tiempo de trabajo
+  /// Programa notificación cuando termine el tiempo de trabajo.
+  ///
+  /// El texto es genérico a propósito: una notificación se dibuja en la pantalla
+  /// bloqueada, así que el nombre que el usuario escribió para su sesión no sale
+  /// de la app. Por eso este método no recibe ese nombre; interpolarlo aquí
+  /// rompería la política de privacidad publicada.
   Future<void> schedulePomodoroWorkEnd({
     required Duration duration,
-    required String activityName,
     required bool isQuickSession,
   }) async {
     final enabled = await arePomodoroNotificationsEnabled();
@@ -726,10 +730,11 @@ class NotificationService implements HabitReminderService {
     );
   }
 
-  /// Programa notificación cuando termine el descanso
+  /// Programa notificación cuando termine el descanso.
+  ///
+  /// Genérica por la misma razón que [schedulePomodoroWorkEnd].
   Future<void> schedulePomodoroBreakEnd({
     required Duration duration,
-    required String activityName,
     required bool completesCycle,
   }) async {
     final enabled = await arePomodoroNotificationsEnabled();
@@ -769,9 +774,10 @@ class NotificationService implements HabitReminderService {
     );
   }
 
-  /// Muestra notificación de sesión Pomodoro completada
+  /// Muestra notificación de sesión Pomodoro completada.
+  ///
+  /// Genérica por la misma razón que [schedulePomodoroWorkEnd].
   Future<void> showPomodoroCompleteNotification({
-    required String activityName,
     required int cycles,
     required Duration totalTime,
   }) async {

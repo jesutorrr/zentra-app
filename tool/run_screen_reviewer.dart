@@ -8,6 +8,7 @@ const _scopedExpectedScreenshotCounts = <String, int>{
   'onboarding': 6,
   'habit-form': 8,
   'notes': 10,
+  'focus': 12,
 };
 
 Future<void> main(List<String> arguments) async {
@@ -94,19 +95,38 @@ Future<void> main(List<String> arguments) async {
         processOutput.contains(
           'This test failed after it had already completed.',
         );
+    // A failed build does not stop `flutter drive`: it attaches to whatever
+    // build is already installed on the simulator and the flow passes against
+    // stale code. Reviewing those captures approves a binary nobody compiled,
+    // so a build failure has to fail the device outright.
+    final hadBuildFailure = processOutput.contains(
+          'Could not build the application for the simulator.',
+        ) ||
+        processOutput.contains('Application failed to start on attempt') ||
+        processOutput.contains('Error (Xcode)');
     final screenshots = outputDirectory
         .listSync()
         .whereType<File>()
         .where((file) => file.path.endsWith('.png'))
         .toList()
       ..sort((left, right) => left.path.compareTo(right.path));
+    // Each capture is named after the slug passed in through `--dart-define`,
+    // so a name from another device proves the flow ran against a binary
+    // compiled for a previous run.
+    final staleScreenshots = screenshots
+        .where(
+          (file) => !file.uri.pathSegments.last.startsWith('$slug-'),
+        )
+        .toList();
 
     results.add(
       _ReviewResult(
         device: device,
         exitCode: processExitCode,
         hadFrameworkException: hadFrameworkException,
+        hadBuildFailure: hadBuildFailure,
         screenshots: screenshots,
+        staleScreenshots: staleScreenshots,
         expectedScreenshotCount: expectedScreenshotCount,
       ),
     );
@@ -246,6 +266,20 @@ File _writeReport({
           'después de terminar el recorrido.',
         );
       }
+      if (result.hadBuildFailure) {
+        buffer.writeln(
+          '- El build para el simulador falló. El recorrido se ejecutó contra '
+          'la app ya instalada, así que estas capturas no representan el '
+          'código actual.',
+        );
+      }
+      if (result.staleScreenshots.isNotEmpty) {
+        buffer.writeln(
+          '- ${result.staleScreenshots.length} capturas no llevan el nombre de '
+          'este dispositivo, señal de que el binario venía de una corrida '
+          'anterior.',
+        );
+      }
       if (result.screenshots.length != expectedScreenshotCount) {
         buffer.writeln(
           '- Se esperaban $expectedScreenshotCount capturas y se generaron '
@@ -309,19 +343,25 @@ class _ReviewResult {
   final _ReviewDevice device;
   final int exitCode;
   final bool hadFrameworkException;
+  final bool hadBuildFailure;
   final List<File> screenshots;
+  final List<File> staleScreenshots;
   final int expectedScreenshotCount;
 
   const _ReviewResult({
     required this.device,
     required this.exitCode,
     required this.hadFrameworkException,
+    required this.hadBuildFailure,
     required this.screenshots,
+    required this.staleScreenshots,
     required this.expectedScreenshotCount,
   });
 
   bool get passed =>
       exitCode == 0 &&
       !hadFrameworkException &&
+      !hadBuildFailure &&
+      staleScreenshots.isEmpty &&
       screenshots.length == expectedScreenshotCount;
 }

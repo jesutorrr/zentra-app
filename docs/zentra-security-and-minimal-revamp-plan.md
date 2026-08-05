@@ -1,6 +1,6 @@
 # Zentra: seguridad y revamp minimalista
 
-Estado de referencia: 3 de agosto de 2026
+Estado de referencia: 4 de agosto de 2026
 
 Este documento es el punto de retoma para el hardening de seguridad y el
 revamp visual Salvia de Zentra. El hardening ya está implementado localmente.
@@ -88,7 +88,11 @@ con acceso al almacenamiento de la app.
 ### Notificaciones y pantalla bloqueada
 
 - Recordatorios de hábitos y resúmenes diarios usan texto genérico.
-- Las notificaciones de enfoque no incluyen el nombre de la actividad.
+- Las notificaciones de enfoque no incluyen el nombre de la actividad. Los tres
+  métodos que las programan ya no reciben ese nombre como parámetro, así que
+  interpolarlo exige cambiar la firma en lugar de escribirlo por descuido en el
+  cuerpo; una prueba inspecciona el título y el cuerpo reales del `zonedSchedule`
+  para que un texto nuevo tampoco lo filtre.
 - El servicio foreground de Android usa visibilidad privada.
 - Los recordatorios de notas comienzan en modo oculto por defecto. El usuario
   todavía puede elegir mostrar título o contenido.
@@ -317,6 +321,36 @@ Conservar:
 Dirección aprobada: Inmersión. Enfoque usa verde profundo; descanso usa crema.
 La jerarquía final es `reiniciar circular | pausar ancho | terminar circular`.
 
+#### Contrato aprobado: Portal + Silencio
+
+Uri aprobó el 4 de agosto de 2026 la dirección `Portal + Silencio`. No es una
+familia de skins: es una sola gramática espacial que cambia de función durante
+el flujo.
+
+- Referencia visual:
+  `docs/superpowers/prototypes/2026-08-04-focus-beyond-skins/portal-silence-motion-storyboard.png`
+  (`sha256 cf2efeb354e1f28a8c87c0ac8f9a58ab4204d7751cb4d35dcc3d2b8d28ffbe7e`).
+- Prototipo de interacción:
+  `docs/superpowers/prototypes/2026-08-04-focus-beyond-skins/portal-silence-prototype.html`
+  (`sha256 ef98e91985173d408b7eec955b8243da8eecf5d50ac7dcd0626f436b7b9ca9bb`).
+- Preparar: el círculo verde profundo es selector de duración y umbral. El CTA
+  breve `Entrar` vive dentro del portal. No hay título redundante `Enfoque` ni
+  card exterior.
+- Transición: al iniciar, el portal crece y sus controles se disuelven. Con
+  Reduced Motion la transición conserva el cambio de estado sin expansión.
+- Sesión: verde profundo para enfoque, crema para descanso, un solo anillo de
+  progreso, tiempo tabular, etapa, siguiente paso y tres controles.
+- Pausa: abre una discontinuidad en el anillo. No agrega overlay ni cambia a
+  una pantalla gris.
+- Descanso: conserva la geometría y cambia la intención con `Suelta los
+  hombros`; no se siente como otra pantalla o skin.
+- Salida: atrás ofrece permanecer, salir conservando el temporizador o
+  terminar. Terminar siempre explica que la sesión no sumará minutos.
+- Cierre: el mismo círculo se cierra como sello y muestra una confirmación de
+  baja estimulación, no un diálogo flotante.
+
+Principio de continuidad: la persona no cambia de página, cruza un umbral.
+
 ### Notas
 
 - Mantener título, cuerpo y estado de guardado.
@@ -389,6 +423,24 @@ Solución propuesta:
 5. Verificar background, force quit, notificación, Live Activity y Dynamic
    Island.
 6. Cerrar con iPhone físico en release.
+
+Estado del 4 de agosto de 2026: Portal + Silencio está implementado localmente.
+Análisis global, suite completa y scope visual `focus` pasan en iPhone 16e,
+iPhone 17 Pro Max, iPad mini (A17 Pro) e iPad Pro 13-inch (M5). La Release
+`2.0.0+25` también compila, firma e instala en iPhone 15 Pro Max. El gate no
+está cerrado: faltan aprobación estética de Uri y recorrido físico de
+background, force quit, notificación, Live Activity y Dynamic Island; el primer
+launch directo fue rechazado porque el dispositivo estaba bloqueado.
+
+Regresión corregida el 4 de agosto de 2026: durante el rediseño de Enfoque, la
+Live Activity pasó a publicar el nombre que escribe el usuario en la pantalla
+bloqueada y en Dynamic Island, y una prueba nueva afirmaba ese comportamiento
+como correcto. Contradecía la regla de la sección 2 y la política publicada.
+`PomodoroProvider` volvió a enviar una etiqueta genérica a las superficies del
+sistema mediante un getter dedicado, y `sessionLabel` conserva el nombre real
+sólo para la interfaz dentro de la app. La prueba quedó invertida para fijar la
+regla. Al tocar el nombre de sesión en Enfoque, verificar siempre qué superficie
+lo recibe.
 
 ### Gate S3. Notas, Calendario y Progreso
 

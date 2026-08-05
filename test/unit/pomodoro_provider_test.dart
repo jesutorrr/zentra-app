@@ -10,6 +10,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:zentra/application/pomodoro_provider.dart';
 import 'package:zentra/domain/focus_repository.dart';
 import 'package:zentra/domain/pomodoro_activity.dart';
+import 'package:zentra/infrastructure/live_activity_service.dart';
 
 class _MutableClock {
   DateTime now;
@@ -49,6 +50,51 @@ class _ManualTimerFactory {
 
   Timer create(Duration duration, void Function(Timer timer) callback) {
     return latest = _ManualTimer(callback);
+  }
+}
+
+class _FakeLiveActivityService extends LiveActivityService {
+  String? startedActivityName;
+  String? updatedActivityName;
+  bool? updatedIsPaused;
+  DateTime? updatedEndTime;
+  int endedCount = 0;
+
+  @override
+  bool get isSupportedPlatform => true;
+
+  @override
+  Future<String?> startPomodoroActivity({
+    required DateTime? endTime,
+    required String sessionType,
+    required String activityName,
+    required int remainingSeconds,
+    required int stageDurationSeconds,
+    required bool isPaused,
+    required String nextLabel,
+  }) async {
+    startedActivityName = activityName;
+    return 'live-activity-test';
+  }
+
+  @override
+  Future<void> updatePomodoroActivity({
+    required DateTime? endTime,
+    required String sessionType,
+    required String activityName,
+    required int remainingSeconds,
+    required int stageDurationSeconds,
+    required bool isPaused,
+    required String nextLabel,
+  }) async {
+    updatedActivityName = activityName;
+    updatedIsPaused = isPaused;
+    updatedEndTime = endTime;
+  }
+
+  @override
+  Future<void> endPomodoroActivity() async {
+    endedCount++;
   }
 }
 
@@ -228,6 +274,39 @@ void main() {
     expect(provider.canShowLauncher, isTrue);
   });
 
+  test('a named quick session reaches the history under that name', () async {
+    final clock = _MutableClock(DateTime.utc(2026, 8, 4, 9));
+    final timers = _ManualTimerFactory();
+    final provider = PomodoroEngine(
+      clock: () => clock.now,
+      periodicTimerFactory: timers.create,
+      completionTransitionDelay: Duration.zero,
+    );
+    await provider.setWorkDuration(25);
+
+    // Naming a session is only worth anything if the name survives into the
+    // history, which is the only place the user can tell two sessions apart.
+    await provider.startQuickSession(name: 'Estudiar Química');
+    clock.advance(const Duration(minutes: 25));
+    await provider.onAppResumed();
+
+    expect(provider.activityHistory, hasLength(1));
+    expect(provider.activityHistory.single.name, 'Estudiar Química');
+    expect(provider.activityHistory.single.isCompleted, isTrue);
+
+    // An unnamed session still lands in the history, just under the default.
+    await provider.startQuickSession();
+    clock.advance(const Duration(minutes: 25));
+    await provider.onAppResumed();
+
+    expect(provider.activityHistory, hasLength(2));
+    expect(
+      provider.activityHistory.map((a) => a.name),
+      containsAll(<String>['Estudiar Química', 'Sesión de enfoque']),
+    );
+    provider.dispose();
+  });
+
   test('a completed session cannot stop a newly started focus', () async {
     final clock = _MutableClock(DateTime.utc(2026, 7, 27, 12));
     final provider = PomodoroEngine(
@@ -303,6 +382,58 @@ void main() {
     );
 
     await provider.skip();
+  });
+
+  test('the scheduled notification never spells out the session name',
+      () async {
+    final provider = PomodoroEngine();
+
+    await provider.startQuickSession(name: 'Terapia con Dr. Salas');
+    await provider.setAppInForeground(false);
+
+    // A notification lands on the lock screen, so it is held to the same rule
+    // as the Live Activity: whatever the user typed stays inside the app. The
+    // arguments are inspected rather than the method signature so that
+    // interpolating the name into the title or body fails here too.
+    final scheduled = notificationCalls
+        .where((call) => call.method == 'zonedSchedule')
+        .toList();
+    expect(scheduled, hasLength(1));
+    expect(
+      scheduled.single.arguments.toString(),
+      isNot(contains('Terapia')),
+    );
+    expect(provider.sessionLabel, 'Terapia con Dr. Salas');
+
+    await provider.skip();
+    provider.dispose();
+  });
+
+  test('Live Activity keeps a generic label through pause and exit', () async {
+    final liveActivity = _FakeLiveActivityService();
+    final provider = PomodoroEngine(
+      liveActivityService: liveActivity,
+      periodicTimerFactory: _ManualTimerFactory().create,
+    );
+
+    await provider.startQuickSession(name: 'Preparar reporte');
+
+    // The lock screen and Dynamic Island are readable by anyone near the
+    // phone, so the name the user typed must never reach them.
+    expect(liveActivity.startedActivityName, 'Sesión de enfoque');
+    expect(provider.sessionLabel, 'Preparar reporte');
+
+    await provider.pause();
+
+    expect(liveActivity.updatedActivityName, 'Sesión de enfoque');
+    expect(liveActivity.updatedIsPaused, isTrue);
+    expect(liveActivity.updatedEndTime, isNull);
+
+    await provider.skip();
+
+    expect(liveActivity.endedCount, 1);
+    expect(provider.canShowLauncher, isTrue);
+    provider.dispose();
   });
 
   test('pause publishes before native cleanup finishes', () async {

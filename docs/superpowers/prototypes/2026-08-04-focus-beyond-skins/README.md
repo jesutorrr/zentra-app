@@ -1,6 +1,7 @@
 # Focus beyond skins
 
-Estado: exploracion UX/UI local. No es contrato aprobado ni implementacion Flutter.
+Estado: dirección `Portal + Silencio` aprobada por Uri e implementada localmente
+en Flutter. Los otros cuatro modelos permanecen como exploración descartada.
 
 Este corte reinicia el ejercicio anterior desde modelos de interaccion. La regla fue que cada propuesta debia conservar una silueta reconocible en monocromo, sin depender de paleta, tipografia ornamental o efectos.
 
@@ -53,8 +54,13 @@ El documento respeta `prefers-reduced-motion`.
 - Los cinco conceptos cambian composicion, objeto y gesto. `SILHOUETTE PASS` conceptual.
 - El HTML y JavaScript se parsearon localmente sin errores de sintaxis.
 - Quick Look produjo capturas de ambos documentos y fueron inspeccionadas visualmente.
-- No se ejecuto el Screen Reviewer de Flutter porque no existe cambio de produccion.
-- `TECHNICAL PASS`, `CONTRACT PASS`, `DEVICE PASS` y `URI APPROVED` permanecen abiertos.
+- Uri eligió `Portal + Silencio` como contrato de producción el 4 de agosto de
+  2026. La implementación vive en `lib/presentation/pomodoro_screen.dart`.
+- El scope `focus` del Screen Reviewer produce 10 capturas por dispositivo y
+  pasa en iPhone compacto, iPhone grande, iPad mini e iPad Pro.
+- `TECHNICAL PASS`, `CONTRACT PASS` y la revisión visual de Codex están en
+  PASS. El smoke completo de servicios nativos en iPhone físico y la
+  aprobación estética final de Uri permanecen abiertos.
 
 ## ImageGen
 

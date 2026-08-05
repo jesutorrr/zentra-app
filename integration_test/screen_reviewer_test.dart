@@ -21,6 +21,7 @@ import 'package:zentra/domain/completed_task_repository.dart';
 import 'package:zentra/domain/habit_reminder_service.dart';
 import 'package:zentra/domain/models.dart';
 import 'package:zentra/domain/note_models.dart';
+import 'package:zentra/domain/pomodoro_activity.dart';
 import 'package:zentra/domain/profile_repository.dart';
 import 'package:zentra/domain/user_profile.dart';
 import 'package:zentra/infrastructure/database/zentra_database.dart';
@@ -194,6 +195,10 @@ void main() {
     }
     if (reviewScope == 'notes') {
       await _reviewNotesScope(review, dependencies);
+      return;
+    }
+    if (reviewScope == 'focus') {
+      await _reviewFocusScope(review, dependencies);
       return;
     }
 
@@ -518,6 +523,122 @@ Future<void> _reviewNotesScope(
   await review.tap(find.byKey(const ValueKey('note-block-0')));
   expect(find.byKey(const ValueKey('note-format-bar')), findsOneWidget);
   await review.capture('09-note-surface-writing-amoled');
+}
+
+Future<void> _reviewFocusScope(
+  _ScreenReviewSession review,
+  _ReviewHarness dependencies,
+) async {
+  final controller = dependencies.pomodoroController;
+  controller.selectSessionType(SessionType.work);
+
+  await review.show(
+    dependencies.buildApp(home: const PomodoroScreen()),
+    expected: find.byType(PomodoroScreen),
+  );
+  expect(find.byKey(const ValueKey('focus_portal')), findsOneWidget);
+  expect(find.text('Haz espacio para\nuna sola cosa'), findsOneWidget);
+  expect(find.text('Enfoque'), findsNothing);
+  await review.capture('00-focus-portal-light');
+
+  await review.tap(
+    find.byKey(const ValueKey('pomodoro_custom_duration_button')),
+  );
+  expect(
+    find.byKey(const ValueKey('pomodoro_duration_dial')),
+    findsOneWidget,
+  );
+  await review.capture('01-focus-duration-dial-light');
+  await review.tap(find.byKey(const ValueKey('pomodoro_duration_apply')));
+
+  await review.tap(find.byKey(const ValueKey('pomodoro_mode_cycle')));
+  expect(find.textContaining('4 enfoques · descansos'), findsOneWidget);
+  await review.capture('02-focus-cycle-light');
+
+  await review.tap(find.byKey(const ValueKey('pomodoro_mode_quick')));
+
+  // Naming a session is optional but it is the only thing that tells two
+  // entries apart in the history, so the field gets a capture of its own.
+  await review.tap(find.byKey(const ValueKey('pomodoro_optional_context')));
+  final activityField = find.byKey(const ValueKey('pomodoro_activity_field'));
+  expect(activityField, findsOneWidget);
+  await review.capture('03-focus-name-field-empty-light');
+  await review.enterText(activityField, 'Estudiar Química');
+  await review.capture('04-focus-named-session-light');
+
+  await review.tap(find.byKey(const ValueKey('pomodoro_start_button')));
+  expect(
+    find.byKey(const ValueKey('focus_work_immersion')),
+    findsOneWidget,
+  );
+  expect(
+    find.descendant(
+      of: find.byKey(const ValueKey('focus_session_active')),
+      matching: find.text('Estudiar Química'),
+    ),
+    findsOneWidget,
+  );
+  await review.capture('05-focus-active-light');
+
+  await review.tap(find.byKey(const ValueKey('pomodoro_pause_resume')));
+  expect(find.byKey(const ValueKey('focus_pause_gap')), findsOneWidget);
+  await review.capture('06-focus-paused-light');
+
+  await review.tap(find.byTooltip('Salir del enfoque'));
+  expect(
+    find.byKey(const ValueKey('focus_safe_exit_sheet')),
+    findsOneWidget,
+  );
+  await review.capture('07-focus-safe-exit-light');
+  await review.tap(find.text('Seguir aquí'));
+
+  await controller.skip();
+  await review.waitForUi();
+  controller.selectSessionType(SessionType.shortBreak);
+  await review.waitForUi();
+  expect(
+    find.byKey(const ValueKey('focus_rest_immersion')),
+    findsOneWidget,
+  );
+  expect(find.text('Suelta los hombros'), findsOneWidget);
+  await review.capture('08-focus-rest-light');
+
+  controller.selectSessionType(SessionType.work);
+  await review.show(
+    dependencies.buildApp(
+      home: const PomodoroScreen(),
+      themeMode: ThemeMode.dark,
+    ),
+    expected: find.byType(PomodoroScreen),
+  );
+  await review.capture('09-focus-portal-amoled');
+  await review.tap(find.byKey(const ValueKey('pomodoro_start_button')));
+  expect(
+    find.byKey(const ValueKey('focus_work_immersion')),
+    findsOneWidget,
+  );
+  await review.capture('10-focus-active-amoled');
+  await controller.skip();
+  await review.waitForUi();
+
+  await review.show(
+    dependencies.buildApp(
+      home: FocusCompletionScene(
+        activity: PomodoroActivity(
+          id: 'screen-review-completion',
+          name: 'Repasar Álgebra lineal',
+          startTime: DateTime(2026, 8, 4, 12),
+          endTime: DateTime(2026, 8, 4, 12, 25),
+          cyclesCompleted: 1,
+          totalMinutes: 25,
+          isCompleted: true,
+        ),
+        onClose: () {},
+      ),
+    ),
+    expected: find.byKey(const ValueKey('focus_completion_dialog')),
+  );
+  await review.capture('11-focus-completion-light');
 }
 
 Future<void> _reviewEntryScope(
@@ -866,7 +987,7 @@ Future<void> _reviewAuthenticatedJourney(
     find.byKey(const ValueKey('pomodoro_mode_cycle')),
   );
   await review.scrollToTop();
-  expect(find.text('Iniciar ciclo de 4 sesiones'), findsOneWidget);
+  expect(find.textContaining('4 enfoques · descansos'), findsOneWidget);
   expect(
     find.byKey(const ValueKey('pomodoro_activity_field')),
     findsNothing,
@@ -883,7 +1004,7 @@ Future<void> _reviewAuthenticatedJourney(
     find.byKey(const ValueKey('focus_session_active')),
     findsOneWidget,
   );
-  expect(find.text('Sesión de enfoque'), findsWidgets);
+  expect(find.text('ENFOQUE'), findsOneWidget);
   await review.capture('14-focus-active');
 
   await review.tap(
@@ -900,7 +1021,7 @@ Future<void> _reviewAuthenticatedJourney(
   await review.tap(
     find.byKey(const ValueKey('pomodoro_cancel_activity')),
   );
-  expect(find.text('¿Terminar enfoque?'), findsOneWidget);
+  expect(find.text('¿Terminar este enfoque?'), findsOneWidget);
   await review.capture('14-focus-cancel-confirm');
   await review.tap(
     find.byKey(const ValueKey('pomodoro_cancel_confirm')),
@@ -1054,6 +1175,14 @@ class _ScreenReviewSession {
     await tester.pump();
     await tester.tap(finder);
     await waitForUi(settleFor);
+  }
+
+  Future<void> enterText(Finder finder, String value) async {
+    expect(finder, findsOneWidget);
+    await tester.ensureVisible(finder);
+    await tester.pump();
+    await tester.enterText(finder, value);
+    await waitForUi();
   }
 
   Future<void> backTo<T extends Widget>() async {

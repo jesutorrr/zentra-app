@@ -112,6 +112,22 @@ formato renderizado y no sólo un párrafo. En una ventana angosta los detalles
 salen como hoja inferior; en una ancha salen como columna lateral y la captura
 la muestra plegada.
 
+Para revisar únicamente el contrato `Portal + Silencio` de Enfoque:
+
+```bash
+./flutter/bin/dart run tool/run_screen_reviewer.dart \
+  --scope focus
+```
+
+Este scope genera 12 capturas por dispositivo: portal, dial, ciclo, campo de
+nombre vacío, sesión nombrada, sesión activa, pausa, salida segura, descanso,
+portal AMOLED, sesión AMOLED y sello de cierre. El campo de nombre tiene dos
+capturas porque su altura al recibir el foco ya desbordó el portal una vez, y
+mirar sólo el campo lleno no lo habría mostrado. La captura del cierre usa el
+mismo widget de producción con una actividad determinista; el flujo de tiempo,
+persistencia y background sigue perteneciendo a sus pruebas de motor y al smoke
+físico.
+
 Los scopes disponibles viven en `tool/run_screen_reviewer.dart`. La matriz
 completa se reserva para cerrar un bloque de pantallas o preparar un release.
 
@@ -129,6 +145,16 @@ aprobado.
 
 El driver falla si dos capturas intentan usar el mismo nombre en una corrida.
 Esto evita un falso PASS causado por sobrescrituras silenciosas.
+
+El runner también falla el dispositivo cuando el build para el simulador falla.
+`flutter drive` no se detiene ante un error de compilación: se adjunta a la app
+que ya estaba instalada y el recorrido pasa contra código viejo. El 4 de agosto
+de 2026 eso produjo un `PASS 10/10` del scope `focus` sobre un binario anterior
+al cambio que se quería revisar, con un DerivedData corrupto como causa. Además
+de leer los errores de Xcode, el runner compara el nombre de cada captura con el
+slug del dispositivo, porque ese nombre viaja por `--dart-define` y delata un
+binario de otra corrida. Si aparece cualquiera de las dos señales, se reporta
+FAIL y las capturas no valen como evidencia.
 
 No se usan comparaciones pixel a pixel por default porque cambian entre
 versiones de iOS, fuentes y motores de render. Si una pantalla se estabiliza,

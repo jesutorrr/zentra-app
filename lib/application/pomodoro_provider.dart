@@ -388,15 +388,23 @@ class PomodoroEngine {
   String get sessionLabel {
     switch (_sessionType) {
       case SessionType.work:
-        return _currentActivity?.name ??
-            _quickSessionName ??
-            _defaultSessionName;
+        return _focusActivityName;
       case SessionType.shortBreak:
         return 'Descanso corto';
       case SessionType.longBreak:
         return 'Descanso largo';
     }
   }
+
+  String get _focusActivityName =>
+      _currentActivity?.name ?? _quickSessionName ?? _defaultSessionName;
+
+  /// The label the lock screen and Dynamic Island are allowed to show.
+  ///
+  /// Deliberately generic: a Live Activity renders on system surfaces that
+  /// anyone near the phone can read, so a name the user typed never leaves the
+  /// app. In-app UI uses [sessionLabel] instead, which does carry the name.
+  String get _systemSurfaceSessionName => _defaultSessionName;
 
   // Is break?
   bool get isBreak => _sessionType != SessionType.work;
@@ -701,7 +709,7 @@ class PomodoroEngine {
         await _liveActivityService.startPomodoroActivity(
           endTime: _state == PomodoroState.running ? _timerEndTime : null,
           sessionType: _sessionType.name,
-          activityName: _defaultSessionName,
+          activityName: _systemSurfaceSessionName,
           remainingSeconds: _remainingSeconds,
           stageDurationSeconds: _activeStageDuration * 60,
           isPaused: _state == PomodoroState.paused,
@@ -725,7 +733,7 @@ class PomodoroEngine {
         await _liveActivityService.updatePomodoroActivity(
           endTime: _state == PomodoroState.running ? _timerEndTime : null,
           sessionType: _sessionType.name,
-          activityName: _defaultSessionName,
+          activityName: _systemSurfaceSessionName,
           remainingSeconds: _remainingSeconds,
           stageDurationSeconds: _activeStageDuration * 60,
           isPaused: _state == PomodoroState.paused,
@@ -1299,7 +1307,6 @@ class PomodoroEngine {
 
     if (showNotification) {
       await _notificationService.showPomodoroCompleteNotification(
-        activityName: completedActivity.name,
         cycles: completedActivity.cyclesCompleted,
         totalTime: Duration(minutes: completedActivity.totalMinutes),
       );
@@ -1426,8 +1433,6 @@ class PomodoroEngine {
     final generation = expectedGeneration ?? _ownerGeneration;
     if (!_isGenerationActive(generation)) return;
     final duration = Duration(seconds: _remainingSeconds);
-    final activityName =
-        _currentActivity?.name ?? _quickSessionName ?? 'Enfoque';
 
     await _foregroundCoordinator.runIfOwned(
       _foregroundOwner,
@@ -1436,13 +1441,11 @@ class PomodoroEngine {
         if (_sessionType == SessionType.work) {
           await _notificationService.schedulePomodoroWorkEnd(
             duration: duration,
-            activityName: activityName,
             isQuickSession: isQuickMode,
           );
         } else {
           await _notificationService.schedulePomodoroBreakEnd(
             duration: duration,
-            activityName: activityName,
             completesCycle: isActivityFinalBreak,
           );
         }
@@ -1997,7 +2000,6 @@ class PomodoroEngine {
             );
           } else {
             await _notificationService.showPomodoroCompleteNotification(
-              activityName: activityName,
               cycles: completedCycles,
               totalTime: Duration(minutes: completedMinutes),
             );

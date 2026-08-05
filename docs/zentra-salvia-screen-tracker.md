@@ -1,6 +1,6 @@
 # Zentra Salvia: seguimiento de pantallas
 
-Actualizado: 4 de agosto de 2026
+Actualizado: 5 de agosto de 2026
 
 Este documento es el tablero operativo del revamp Salvia. La estrategia general
 de seguridad, accesibilidad y minimalismo vive en
@@ -37,8 +37,8 @@ cada diálogo ni cada estado de carga.
 | 7 | Notas: biblioteca | Activa | Vista previa legible, progreso, búsqueda con fragmento y filtro por etiqueta; pendiente Release física y aprobación de Uri. |
 | 8 | Notas: superficie única | Activa | Lectura y escritura en el mismo lugar, sin modo editar; pendiente Release física y aprobación de Uri. |
 | 9 | Recordatorio de nota | Pendiente | Revisar privacidad, fecha, hora y permisos. |
-| 10 | Preparar enfoque | Pendiente | Rediseñar dial y presets. |
-| 11 | Enfoque activo | Pendiente | Aplicar Inmersión y corregir salida/cancelación. |
+| 10 | Preparar enfoque | Activa | Portal, dial, presets y transición implementados; pendiente smoke nativo físico y aprobación final de Uri. |
+| 11 | Enfoque activo | Activa | Inmersión, pausa, descanso, salida segura y cierre implementados; pendiente smoke nativo físico y aprobación final de Uri. |
 | 12 | Historial de enfoque | Pendiente | Revisar jerarquía y estados vacíos. |
 | 13 | Progreso y logros | Pendiente | Evitar métricas duplicadas y validar eventos reales. |
 | 14 | Historial de actividad | Pendiente | Revisar actividad, archivo y filtros. |
@@ -48,8 +48,110 @@ cada diálogo ni cada estado de carga.
 | 18 | Acerca de | Pendiente | Compactar información legal y de versión. |
 | 19 | Soporte | Pendiente | Confirmar si sigue como pantalla independiente. |
 
-Estado del corte: 3 superficies aprobadas, 6 activas y 10 pendientes. Las
+Estado del corte: 3 superficies aprobadas, 8 activas y 8 pendientes. Las
 superficies activas cuentan como pendientes hasta cerrar todos sus gates.
+
+## Corte activo: Focus Portal + Silencio
+
+Preparar enfoque y Enfoque activo comparten un solo contrato de interacción.
+El círculo es selector, umbral de entrada, timer, pausa, transición a descanso
+y sello de cierre. La sesión de trabajo invierte la superficie a verde
+profundo; el descanso vuelve a crema sin cambiar la geometría.
+
+- Storyboard aprobado:
+  `docs/superpowers/prototypes/2026-08-04-focus-beyond-skins/portal-silence-motion-storyboard.png`.
+- Prototipo aprobado:
+  `docs/superpowers/prototypes/2026-08-04-focus-beyond-skins/portal-silence-prototype.html`.
+- Alcance de este corte: launcher, dial con snap cada 5 minutos, transición,
+  sesión, pausa, descanso, salida segura y cierre.
+- Fuera de este corte: Historial de enfoque conserva estado `Pendiente` y no se
+  rediseña por arrastre.
+- Gate de cierre: pruebas enfocadas, análisis, scope `focus` del Screen
+  Reviewer en teléfono y tablet, prueba Release física de background,
+  notificación, Live Activity y Dynamic Island, y aprobación estética de Uri.
+
+Evidencia del 4 de agosto de 2026, actualizada el 5 de agosto:
+
+- `flutter analyze`: PASS global sin issues.
+- `flutter test`: 965 PASS y 5 SKIP; los skips corresponden a integraciones que
+  no contaban con su entorno externo y no se presentan como cobertura verde.
+- Pruebas enfocadas de motor, controlador, notificación, Live Activity,
+  historial y responsive: 51 PASS.
+- Scope `focus` en iPhone 16e: 10/10, reporte en
+  `build/screen-review/focus-portal-silence-20260804/iphone-compact/report.md`.
+- Scope `focus` en iPhone 17 Pro Max: 10/10, reporte en
+  `build/screen-review/focus-portal-silence-20260804/iphone/report.md`.
+- Scope `focus` en iPad mini (A17 Pro): 10/10, reporte en
+  `build/screen-review/focus-portal-silence-20260804/ipad-mini/report.md`.
+- Scope `focus` en iPad Pro 13-inch (M5): 10/10, reporte en
+  `build/screen-review/focus-portal-silence-20260804/ipad/report.md`.
+- Revisión visual de Codex: PASS de jerarquía, espaciado, contraste y
+  continuidad en las 40 capturas. No sustituye aprobación de Uri.
+- Release `2.0.0+25` compilada, firmada e instalada en iPhone 15 Pro Max físico
+  el 4 de agosto de 2026. El launch directo quedó bloqueado por el estado
+  `Locked` del dispositivo, así que no se presenta como smoke nativo completo.
+
+Auditoría cruzada del 4 de agosto de 2026, cuatro defectos corregidos sobre este
+corte:
+
+- La Live Activity había empezado a publicar el nombre escrito por el usuario en
+  la pantalla bloqueada y en Dynamic Island, con una prueba que fijaba ese
+  comportamiento como esperado. Se restauró la etiqueta genérica en las
+  superficies del sistema, `sessionLabel` conserva el nombre real sólo dentro de
+  la app y la prueba quedó invertida. Detalle en el plan de seguridad.
+- El launcher de Enfoque se anclaba al borde superior en tablet y dejaba la
+  mitad inferior de la ventana vacía. El portal ahora reclama el centro y el
+  contenido más alto que la ventana sigue haciendo scroll desde arriba.
+- Una nota de estado partía en dos la lista numerada del Gate S2 en el plan de
+  seguridad.
+- El Screen Reviewer podía reportar `PASS` sobre un build fallido: `flutter
+  drive` se adjuntaba a la app ya instalada y capturaba código viejo. Ahora el
+  runner falla ante errores de Xcode y ante capturas cuyo nombre no corresponde
+  al dispositivo. Cualquier evidencia visual anterior a este cambio hay que
+  leerla sabiendo que un PASS no garantizaba que el binario fuera reciente.
+
+Reverificación del 4 de agosto, posterior a esas correcciones y previa a las del
+día 5: `flutter analyze` sin issues, `flutter test` 959 PASS y 5 SKIP —cinco
+menos que hoy, porque las pruebas de nombrar sesión aún no existían—, y scope
+`focus` en iPad Pro 13-inch (M5) 10/10
+con build limpio en `build/screen-review/20260804-141144/report.md`. El centrado
+del portal en tablet quedó confirmado en captura y protegido por una aserción de
+geometría en `test/widget/adaptive_navigation_test.dart`.
+
+Nombrar la sesión de Enfoque, corregido el 5 de agosto de 2026. El rediseño no
+rompió el guardado —el nombre siempre llegó al historial— pero sí dejó la opción
+prácticamente inservible, por tres causas distintas:
+
+- El botón decía «Añadir contexto», que no dice qué hace, y el campo había
+  perdido su etiqueta, su texto de ayuda y la `ValueKey` de la que depende el
+  Screen Reviewer. Ahora el botón dice «Nombrar esta sesión» y el campo declara
+  que lo escrito se guarda en el historial y que es opcional.
+- El campo cambiaba de forma y de altura al recibir el foco, porque declaraba un
+  borde inferior propio mientras el tema global le daba un contorno redondeado al
+  enfocarse. Ese salto de 16 px desbordaba el portal: `SliverFillRemaining`
+  reserva espacio según la altura *intrínseca* del hijo, y un `AnimatedSize`
+  informa la altura hacia la que anima, no la que pinta. Se eliminó el borde
+  propio y el sliver se sustituyó por una altura mínima calculada del viewport,
+  que mide el layout real: centra mientras el contenido cabe y crece a scroll
+  cuando no.
+- En teléfono el campo se revelaba por debajo del pliegue, así que pulsar el
+  botón no parecía hacer nada. Revelarlo ahora también le da el foco, con lo que
+  entra en pantalla y levanta el teclado.
+
+El scope `focus` pasó de 10 a 12 capturas: el campo vacío y el campo con nombre
+tienen captura propia. `flutter analyze` sin issues, `flutter test` 965 PASS y 5
+SKIP, y `focus` 12/12 tanto en iPhone 16e como en iPad mini (A17 Pro)
+(`build/screen-review/named-session-v4` y `named-session-ipadmini`). El nombre
+escrito sigue sin salir a Live Activity, Dynamic Island ni notificaciones, y esa
+última superficie quedó cerrada por construcción: los tres métodos de
+notificación de enfoque recibían el nombre y no lo usaban, así que dejaron de
+recibirlo. Una prueba nueva lee el título y el cuerpo del `zonedSchedule` real.
+
+Estado del gate: implementación local, pruebas, análisis, matriz visual y build
+Release en PASS. Siguen pendientes la aprobación estética de Uri y el recorrido
+físico de background, force quit, notificación, Live Activity y Dynamic Island.
+Ningún PASS técnico cambia estas dos superficies a `Aprobada` sin esas dos
+evidencias.
 
 ## Corte activo: nube estacionada
 
