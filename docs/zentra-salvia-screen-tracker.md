@@ -90,6 +90,11 @@ Evidencia del 4 de agosto de 2026, actualizada el 5 de agosto:
 - Release `2.0.0+25` compilada, firmada e instalada en iPhone 15 Pro Max físico
   el 4 de agosto de 2026. El launch directo quedó bloqueado por el estado
   `Locked` del dispositivo, así que no se presenta como smoke nativo completo.
+- Release `2.0.0+25` reinstalada y lanzada en «jesutorr's iPhone» (iOS 26.6) el 5
+  de agosto de 2026, ya con la sesión nombrable. Esta vez el launch sí ocurrió.
+  Instalación confirmada con `devicectl`. Instalar y abrir no es el smoke nativo:
+  el recorrido de background, force quit, notificación, Live Activity y Dynamic
+  Island sigue pendiente y sólo lo puede dar Uri sobre el dispositivo.
 
 Auditoría cruzada del 4 de agosto de 2026, cuatro defectos corregidos sobre este
 corte:
