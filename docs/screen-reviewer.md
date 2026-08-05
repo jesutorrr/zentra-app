@@ -94,7 +94,11 @@ Para revisar únicamente Crear/editar hábito:
 ```
 
 Este scope genera 8 capturas por dispositivo: recurrente y actividad única en
-light/AMOLED, días personalizados, recordatorio, teclado y menú de edición.
+light/AMOLED, días personalizados, recordatorio, teclado y menú de edición. Desde
+el 5 de agosto de 2026 el formulario lleva un solo acento —el teal del botón de
+guardar— en lugar de uno por categoría, así que estas capturas sirven para
+confirmar que ni la banda del encabezado ni los selectores cambian de color al
+probar categorías.
 
 Para revisar la biblioteca de Notas y la superficie única de nota:
 
@@ -123,7 +127,11 @@ Este scope genera 12 capturas por dispositivo: portal, dial, ciclo, campo de
 nombre vacío, sesión nombrada, sesión activa, pausa, salida segura, descanso,
 portal AMOLED, sesión AMOLED y sello de cierre. El campo de nombre tiene dos
 capturas porque su altura al recibir el foco ya desbordó el portal una vez, y
-mirar sólo el campo lleno no lo habría mostrado. La captura del cierre usa el
+mirar sólo el campo lleno no lo habría mostrado. La parada del portal afirma
+además que el selector Rápido/Ciclo va antes del titular y que
+`maxScrollExtent == 0`: «Otro» y «Nombrar esta sesión» llegaron a quedar bajo el
+pliegue, y una captura de un lanzador incompleto se ve perfectamente sana. La
+captura del cierre usa el
 mismo widget de producción con una actividad determinista; el flujo de tiempo,
 persistencia y background sigue perteneciendo a sus pruebas de motor y al smoke
 físico.

@@ -10,6 +10,7 @@ import 'package:zentra/domain/models.dart';
 import 'package:zentra/domain/pomodoro_activity.dart';
 import 'package:zentra/infrastructure/notification_service.dart';
 import 'package:zentra/presentation/auth_screen.dart';
+import 'package:zentra/presentation/design_tokens.dart';
 import 'package:zentra/presentation/habits_list_screen.dart';
 import 'package:zentra/presentation/onboarding_screen.dart';
 import 'package:zentra/presentation/pomodoro_screen.dart';
@@ -101,6 +102,7 @@ void main() {
   Future<Widget> buildApp(
     Widget home, {
     double textScale = 1,
+    ThemeData? theme,
   }) async {
     var harness = currentHarness;
     if (harness == null) {
@@ -110,7 +112,7 @@ void main() {
     }
     return harness.buildApp(
       home: home,
-      theme: AppTheme.lightTheme,
+      theme: theme ?? AppTheme.lightTheme,
       textScale: textScale,
     );
   }
@@ -406,8 +408,18 @@ void main() {
       find.byKey(const ValueKey('focus_portal_headline')),
       findsOneWidget,
     );
-    expect(find.text('Haz espacio para\nuna sola cosa'), findsOneWidget);
+    expect(find.text('Una sola cosa'), findsOneWidget);
     expect(find.text('Enfoque'), findsNothing);
+    // Rhythm before headline: the mode selector is the first thing on the
+    // screen, the way "Se repite / Una sola vez" opens the habit form.
+    expect(
+      tester.getRect(quickMode).top,
+      lessThan(
+        tester
+            .getRect(find.byKey(const ValueKey('focus_portal_headline')))
+            .top,
+      ),
+    );
     expect(find.text('Entrar'), findsOneWidget);
     expect(startButton, findsOneWidget);
     expect(startButton.hitTestable(), findsOneWidget);
@@ -509,6 +521,90 @@ void main() {
     expect((portalTop + portalBottom) / 2, closeTo(1366 / 2, 1366 / 6));
     expect(portalTop, greaterThan(1366 * 0.25));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the whole focus launcher fits on one screen without scrolling',
+      (tester) async {
+    // Every option on this screen has to be visible without a scroll. "Otro" and
+    // "Nombrar esta sesión" are the two the user reported missing: they sat
+    // 135dp below the fold behind a five-line headline, a subtitle and a dial
+    // sized only by width, and nothing on screen suggested there was more.
+    for (final size in const <Size>[
+      Size(430, 932), // iPhone 15 Pro Max
+      Size(393, 852), // iPhone 15
+      Size(375, 667), // iPhone SE 2/3
+      Size(360, 640), // small Android
+      Size(320, 568), // iPhone SE 1
+    ]) {
+      currentHarness = null;
+      await configureDevice(tester, logicalSize: size);
+      await tester.pumpWidget(await buildApp(const PomodoroScreen()));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      final label = '${size.width.toInt()}x${size.height.toInt()}';
+      final scroll = Scrollable.of(
+        tester.element(find.byKey(const ValueKey('pomodoro_optional_context'))),
+      ).position;
+      expect(
+        scroll.maxScrollExtent,
+        0,
+        reason: '$label: el lanzador de enfoque exige scroll.',
+      );
+
+      for (final key in <String>[
+        'pomodoro_mode_quick',
+        'pomodoro_mode_cycle',
+        'focus_portal_headline',
+        'pomodoro_duration_25',
+        'pomodoro_custom_duration_button',
+        'pomodoro_optional_context',
+      ]) {
+        final finder = find.byKey(ValueKey(key));
+        expect(finder, findsOneWidget, reason: '$label: falta $key.');
+        final rect = tester.getRect(finder);
+        expect(rect.top, greaterThanOrEqualTo(0), reason: '$label: $key');
+        expect(
+          rect.bottom,
+          lessThanOrEqualTo(size.height),
+          reason: '$label: $key queda debajo del borde inferior.',
+        );
+        expect(
+          rect.right,
+          lessThanOrEqualTo(size.width + 0.5),
+          reason: '$label: $key se sale por la derecha.',
+        );
+      }
+
+      // Fitting must not come out of the tap targets.
+      for (final key in <String>[
+        'pomodoro_duration_5',
+        'pomodoro_duration_15',
+        'pomodoro_duration_25',
+        'pomodoro_duration_45',
+        'pomodoro_custom_duration_button',
+      ]) {
+        expect(
+          tester.getSize(find.byKey(ValueKey(key))).height,
+          greaterThanOrEqualTo(48),
+          reason: '$label: $key quedó por debajo de 48dp de alto.',
+        );
+      }
+
+      // All five presets on one row: a second row is what pushed the naming
+      // button off the bottom, and it stranded "Otro" where nobody looks.
+      final presetTop = tester.getRect(
+        find.byKey(const ValueKey('pomodoro_duration_5')),
+      ).top;
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('pomodoro_custom_duration_button')))
+            .top,
+        closeTo(presetTop, 1),
+        reason: '$label: "Otro" cayó a una segunda fila.',
+      );
+
+      expect(tester.takeException(), isNull, reason: label);
+    }
   });
 
   testWidgets('Focus carries a typed session name into the history',
@@ -702,6 +798,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Pomodoro completion stays readable when the app is in AMOLED',
+      (tester) async {
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    await tester.pumpWidget(
+      await buildApp(
+        FocusCompletionScene(
+          activity: PomodoroActivity(
+            id: 'completed-focus',
+            name: 'Repasar Álgebra lineal',
+            startTime: DateTime(2026, 8, 4, 12),
+            endTime: DateTime(2026, 8, 4, 12, 25),
+            cyclesCompleted: 1,
+            totalMinutes: 25,
+            isCompleted: true,
+          ),
+          onClose: () {},
+        ),
+        // The closing seal paints a light surface regardless of the app theme,
+        // so it is the dark theme that exposes the bug: descendants resolved
+        // their foreground from the ambient scheme and landed near-black ink on
+        // cream (1.31:1 for the button, 1.44:1 for the close icon).
+        theme: AppTheme.darkTheme,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final surface = ZentraPalette.light.functionalSurface;
+
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    final buttonBackground =
+        button.style!.backgroundColor!.resolve(<WidgetState>{})!;
+    final buttonLabel = button.style!.foregroundColor?.resolve(<WidgetState>{}) ??
+        Theme.of(tester.element(find.byType(FilledButton)))
+            .filledButtonTheme
+            .style!
+            .foregroundColor!
+            .resolve(<WidgetState>{})!;
+    expect(
+      _contrastRatio(buttonLabel, buttonBackground),
+      greaterThanOrEqualTo(4.5),
+    );
+
+    final closeIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const ValueKey('focus_completion_close')),
+        matching: find.byType(Icon),
+      ),
+    );
+    final closeColor = closeIcon.color ??
+        IconTheme.of(
+          tester.element(find.byKey(const ValueKey('focus_completion_close'))),
+        ).color!;
+    expect(_contrastRatio(closeColor, surface), greaterThanOrEqualTo(3.0));
+
+    // The headline and the closing line are the two largest pieces of text and
+    // must hold normal-text contrast against the light surface too.
+    for (final text in <String>[
+      'Enfoque completado',
+      'Una cosa menos en tu cabeza.',
+      'LISTO',
+    ]) {
+      final widget = tester.widget<Text>(find.text(text));
+      final resolved = widget.style?.color ??
+          DefaultTextStyle.of(tester.element(find.text(text))).style.color!;
+      expect(
+        _contrastRatio(resolved, surface),
+        greaterThanOrEqualTo(4.5),
+        reason: 'El texto «$text» no alcanza 4.5:1 sobre el fondo claro.',
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Today exposes primary destinations instead of a hidden menu',
       (tester) async {
     await configureDevice(tester, logicalSize: const Size(390, 844));
@@ -844,4 +1013,13 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
     });
   }
+}
+
+/// WCAG relative-luminance contrast ratio between two opaque colours.
+double _contrastRatio(Color foreground, Color background) {
+  final a = foreground.computeLuminance();
+  final b = background.computeLuminance();
+  final lighter = a > b ? a : b;
+  final darker = a > b ? b : a;
+  return (lighter + 0.05) / (darker + 0.05);
 }

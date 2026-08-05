@@ -139,7 +139,10 @@ class ZentraPalette extends ThemeExtension<ZentraPalette> {
     various: Color(0xFF546E7A),
     functionalSurface: Color(0xFFFFFEFB),
     specialSurface: Color(0xFFFFF0EC),
-    salviaFormHeader: Color(0xFFF6DED5),
+    // Teal family, like the dark counterpart below: the habit form now carries a
+    // single accent instead of one per category, so its header band no longer
+    // shifts hue with the chosen category. It was a peach that nothing painted.
+    salviaFormHeader: Color(0xFFDCEDE6),
   );
 
   static const dark = ZentraPalette(

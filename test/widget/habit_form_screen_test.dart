@@ -382,6 +382,31 @@ void main() {
     return (header.decoration! as BoxDecoration).color!;
   }
 
+  BoxDecoration categoryDecoration(WidgetTester tester, Category category) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(ValueKey('habit-category-${category.name}')),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    return container.decoration! as BoxDecoration;
+  }
+
+  Color categoryRingColor(WidgetTester tester, Category category) {
+    return categoryDecoration(tester, category).border!.bottom.color;
+  }
+
+  /// The selected fill flattened against the page it sits on: the cell paints a
+  /// translucent tint, so the icon is really read against this composite, not
+  /// against the tint's own nominal colour.
+  Color categoryFillColor(WidgetTester tester, Category category) {
+    final fill = categoryDecoration(tester, category).color!;
+    final backdrop = Theme.of(
+      tester.element(find.byKey(const ValueKey('habit-form-screen'))),
+    ).colorScheme.surface;
+    return Color.alphaBlend(fill, backdrop);
+  }
+
   Future<void> enterTitle(WidgetTester tester, String value) async {
     final field = find.byKey(const ValueKey('habit-title-field'));
     await tester.enterText(field, value);
@@ -407,6 +432,43 @@ void main() {
     expect(habit.frequency.daysOfWeek, [1, 2, 3, 4, 5, 6, 7]);
     expect(habit.hasReminder, isFalse);
     expect(harness.reminders.scheduled, isEmpty);
+  });
+
+  testWidgets('the seven weekdays fit on a phone without sideways scrolling',
+      (tester) async {
+    // Sunday used to sit off the right edge: the row only laid out as a plain
+    // Row when each cell reached 42dp, and below that it fell back to a
+    // horizontal scroller with no affordance, so the last day simply looked
+    // cut off. Every phone width has to show all seven at once.
+    for (final width in <double>[430, 393, 375, 360, 320]) {
+      await pumpForm(tester, size: Size(width, 844));
+      await enterTitle(tester, 'Practicar guitarra');
+      await tapKey(tester, 'habit-frequency-custom');
+
+      final row = find.byKey(const ValueKey('habit-custom-days'));
+      expect(row, findsOneWidget, reason: 'ancho $width');
+      expect(
+        find.descendant(of: row, matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+        reason: 'A $width dp la fila de días cayó al scroll horizontal.',
+      );
+
+      final rowRect = tester.getRect(row);
+      for (var day = 1; day <= DateTime.daysPerWeek; day++) {
+        final cell = tester.getRect(find.byKey(ValueKey('habit-day-$day')));
+        expect(
+          cell.right,
+          lessThanOrEqualTo(rowRect.right + 0.5),
+          reason: 'A $width dp el día $day se sale por la derecha.',
+        );
+        expect(
+          cell.width,
+          greaterThanOrEqualTo(30),
+          reason: 'A $width dp el día $day quedó demasiado angosto.',
+        );
+      }
+      expect(tester.takeException(), isNull, reason: 'ancho $width');
+    }
   });
 
   testWidgets(
@@ -807,22 +869,58 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('light header follows the selected category tint',
+  testWidgets('the form accent is the same teal for every category',
+      (tester) async {
+    // The accent used to be the category colour, so choosing "Agua" turned the
+    // whole form blue and "Movimiento" turned it orange. The form now speaks
+    // with one voice: the teal of the save button. The category still reads
+    // through its icon, which is the signal that actually distinguishes them.
+    for (final themeMode in <ThemeMode>[ThemeMode.light, ThemeMode.dark]) {
+      final dark = themeMode == ThemeMode.dark;
+      final palette = dark ? ZentraPalette.dark : ZentraPalette.light;
+      final accents = <Category, Color>{};
+      final fills = <Category, Color>{};
+
+      for (final category in Category.values) {
+        await pumpForm(tester, themeMode: themeMode);
+        await tapKey(tester, 'habit-category-${category.name}');
+        accents[category] = categoryRingColor(tester, category);
+        fills[category] = categoryFillColor(tester, category);
+      }
+
+      for (final category in Category.values) {
+        expect(
+          accents[category],
+          palette.brandTeal,
+          reason: '${category.name} en $themeMode no usa el teal de la marca.',
+        );
+        // Icon on its own selected fill: an icon is a large graphical object,
+        // so 3.0 is the bar it has to clear.
+        expect(
+          _contrastRatio(palette.brandTeal, fills[category]!),
+          greaterThanOrEqualTo(3.0),
+          reason: '${category.name} en $themeMode pierde el icono en el relleno.',
+        );
+      }
+    }
+  });
+
+  testWidgets('the light header keeps one fixed tint across categories',
       (tester) async {
     await pumpForm(tester);
+    final initialColor = headerColor(tester);
 
-    expect(
-      headerColor(tester),
-      AppTheme.getCategoryTint(Category.varios, Brightness.light),
-    );
+    expect(initialColor, ZentraPalette.light.salviaFormHeader);
     expect(headerContainer(tester).duration, const Duration(milliseconds: 240));
     expect(headerContainer(tester).curve, Curves.easeOutCubic);
 
     await tapKey(tester, 'habit-category-movimiento');
 
+    expect(headerColor(tester), initialColor);
+    // The header carries the title and the Se repite / Una sola vez selector.
     expect(
-      headerColor(tester),
-      AppTheme.getCategoryTint(Category.movimiento, Brightness.light),
+      _contrastRatio(ZentraPalette.light.ink, initialColor),
+      greaterThanOrEqualTo(4.5),
     );
   });
 
@@ -904,4 +1002,12 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+}
+
+double _contrastRatio(Color foreground, Color background) {
+  final a = foreground.computeLuminance();
+  final b = background.computeLuminance();
+  final lighter = a > b ? a : b;
+  final darker = a > b ? b : a;
+  return (lighter + 0.05) / (darker + 0.05);
 }

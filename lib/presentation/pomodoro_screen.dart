@@ -10,6 +10,7 @@ import '../domain/pomodoro_activity.dart';
 import 'design_tokens.dart';
 import 'motion_policy.dart';
 import 'pomodoro_history_screen.dart';
+import 'theme.dart';
 import 'utils/feedback_utils.dart';
 import 'widgets/ambient_background.dart';
 import 'widgets/responsive_layout.dart';
@@ -291,7 +292,12 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                               layout.horizontalPagePadding,
                               0,
                               layout.horizontalPagePadding,
-                              context.spacing.xxl,
+                              // On a short phone this bottom air is the
+                              // difference between the naming button being on
+                              // the screen and being under it.
+                              layout.isShort
+                                  ? context.spacing.md
+                                  : context.spacing.xxl,
                             ),
                             child: ResponsiveContentFrame(
                               alignment: Alignment.center,
@@ -300,7 +306,8 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  SizedBox(height: context.spacing.md),
+                                  if (!layout.isShort)
+                                    SizedBox(height: context.spacing.md),
                                   if (layout.isExpanded)
                                     Row(
                                       crossAxisAlignment:
@@ -341,7 +348,11 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                                       provider: widget.provider,
                                       controller: widget.controller,
                                     ),
-                                    SizedBox(height: context.spacing.md),
+                                    SizedBox(
+                                      height: layout.isShort
+                                          ? context.spacing.xs
+                                          : context.spacing.md,
+                                    ),
                                     _PortalConfiguration(
                                       provider: widget.provider,
                                       controller: widget.controller,
@@ -462,29 +473,40 @@ class _PortalIntro extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // A short phone has no room to spend on a display-size headline; it shrinks
+    // so the portal below it stays whole rather than trailing off the bottom
+    // edge. Below 360dp it shrinks again: at 28px the three words wrapped to a
+    // second line, which costs another 30dp on the screen that has the least.
+    final screen = MediaQuery.sizeOf(context);
+    final short = screen.height < 700;
+    final headline = !short
+        ? theme.textTheme.displaySmall
+        : screen.width < 360
+            ? theme.textTheme.headlineSmall
+            : theme.textTheme.headlineMedium;
+    // Rhythm first, then the headline — the same order as the habit form, where
+    // "Se repite / Una sola vez" sits at the top before anything else. Picking
+    // Rápido or Ciclo is the decision that changes what the rest of the screen
+    // means, so it stops being something the user finds after reading.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _ModeSelector(provider: provider, controller: controller),
+        SizedBox(height: short ? context.spacing.sm : context.spacing.lg),
+        // One line, and no subtitle under it. The old copy carried a hard line
+        // break and still wrapped: five lines at 393dp, 195dp of headline, which
+        // together with the subtitle pushed "Otro" and the naming button 135dp
+        // below the fold on the very screen where they are the two options
+        // worth discovering.
         Text(
-          'Haz espacio para\nuna sola cosa',
+          'Una sola cosa',
           key: const ValueKey('focus_portal_headline'),
-          style: theme.textTheme.displaySmall?.copyWith(
+          style: headline?.copyWith(
             fontWeight: FontWeight.w500,
             height: 1.08,
             letterSpacing: -1.8,
           ),
         ),
-        SizedBox(height: context.spacing.sm),
-        Text(
-          'Elige un ritmo y deja que Zentra cuide el tiempo.',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w400,
-            height: 1.45,
-          ),
-        ),
-        SizedBox(height: context.spacing.lg),
-        _ModeSelector(provider: provider, controller: controller),
       ],
     );
   }
@@ -624,6 +646,12 @@ class _PortalConfiguration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Narrow phones lose the chips' decorative width, never their height: at
+    // VisualDensity.compact they came out 40dp tall, under the 48dp tap target,
+    // which is not a trade worth making for one row of layout.
+    final narrow = MediaQuery.sizeOf(context).width < 360;
+    final labelPadding =
+        narrow ? const EdgeInsets.symmetric(horizontal: 2) : null;
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.8,
       child: Column(
@@ -639,31 +667,16 @@ class _PortalConfiguration extends StatelessWidget {
               onStart: onStart,
             ),
           ),
-          SizedBox(height: context.spacing.md),
-          Center(
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: context.spacing.xs,
-              runSpacing: context.spacing.xs,
-              children: [
-                for (final preset in presets)
-                  ChoiceChip(
-                    key: ValueKey('pomodoro_duration_$preset'),
-                    label: Text('$preset'),
-                    selected: provider.workDuration == preset,
-                    onSelected: (_) {
-                      triggerHaptic(HapticType.selection);
-                      controller.setWorkDuration(preset);
-                    },
-                  ),
-                ActionChip(
-                  key: const ValueKey('pomodoro_custom_duration_button'),
-                  avatar: const Icon(Icons.tune_rounded, size: 18),
-                  label: const Text('Otro'),
-                  onPressed: onOpenDial,
-                ),
-              ],
-            ),
+          SizedBox(
+            height: narrow ? context.spacing.sm : context.spacing.md,
+          ),
+          _DurationPresets(
+            presets: presets,
+            selected: provider.workDuration,
+            narrow: narrow,
+            labelPadding: labelPadding,
+            onSelect: controller.setWorkDuration,
+            onOpenDial: onOpenDial,
           ),
           SizedBox(height: context.spacing.sm),
           _OptionalFocusContext(
@@ -688,6 +701,76 @@ class _PortalConfiguration extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The four presets and "Otro" on a single row.
+///
+/// They used to be a centered [Wrap], which is fine until the row does not fit:
+/// then "Otro" drops to a second line, and the whole portal grows by 56dp. On a
+/// 320dp screen that was exactly what pushed the naming button off the bottom
+/// edge, and it left the option to pick any other duration sitting alone on a
+/// row the user had no reason to look for. The chips are all short labels, so
+/// letting them share the width equally keeps one row down to 320dp without
+/// shrinking any tap target below 48dp.
+class _DurationPresets extends StatelessWidget {
+  final List<int> presets;
+  final int selected;
+  final bool narrow;
+  final EdgeInsets? labelPadding;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onOpenDial;
+
+  const _DurationPresets({
+    required this.presets,
+    required this.selected,
+    required this.narrow,
+    required this.labelPadding,
+    required this.onSelect,
+    required this.onOpenDial,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = narrow ? context.spacing.xxs : context.spacing.xs;
+    final chips = <Widget>[
+      for (final preset in presets)
+        ChoiceChip(
+          key: ValueKey('pomodoro_duration_$preset'),
+          label: Text('$preset', textAlign: TextAlign.center),
+          selected: selected == preset,
+          labelPadding: labelPadding,
+          // The checkmark widens whichever chip is selected, so the row would
+          // shift sideways as the user tried durations. The fill already says
+          // which one is chosen, and so does its selected semantics.
+          showCheckmark: !narrow,
+          onSelected: (_) {
+            triggerHaptic(HapticType.selection);
+            onSelect(preset);
+          },
+        ),
+      ActionChip(
+        key: const ValueKey('pomodoro_custom_duration_button'),
+        avatar: narrow ? null : const Icon(Icons.tune_rounded, size: 18),
+        label: const Text('Otro', textAlign: TextAlign.center),
+        labelPadding: labelPadding,
+        onPressed: onOpenDial,
+      ),
+    ];
+
+    return Row(
+      children: [
+        for (var index = 0; index < chips.length; index++) ...[
+          if (index > 0) SizedBox(width: gap),
+          // "Otro" carries a word where the others carry two digits, so an even
+          // split would starve it. Giving it two shares keeps the row balanced.
+          Expanded(
+            flex: index == chips.length - 1 ? 2 : 1,
+            child: Align(child: chips[index]),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -731,7 +814,16 @@ class _PortalDial extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.zentraPalette;
     final cream = ZentraPalette.light.functionalSurface;
-    final size = math.min(372.0, MediaQuery.sizeOf(context).width - 40);
+    final screen = MediaQuery.sizeOf(context);
+    // Width alone used to decide this, which is why a 375×667 phone got a 335dp
+    // dial — half its height — and pushed "Otro" and the naming button off the
+    // screen. Capping against height as well keeps the whole portal on one
+    // screen on short phones; on a 393×852 and up the width cap still wins, so
+    // the dial there is exactly the size it has always been.
+    final size = math.min(
+      math.min(372.0, screen.width - 40),
+      math.max(240.0, screen.height * 0.42),
+    );
     final normalized = (minutes - 5) / 55;
     final paintedProgress = 0.045 + normalized * 0.955;
 
@@ -1814,6 +1906,34 @@ class FocusCompletionScene extends StatelessWidget {
   Widget build(BuildContext context) {
     const palette = ZentraPalette.light;
     final cycle = activity.cyclesCompleted > 1;
+    // The closing seal is always a light, low-stimulation surface, even when the
+    // app runs in AMOLED. Painting a light background while the ambient theme
+    // stays dark is what made the button label and the close icon unreadable:
+    // they resolve their foreground from `colorScheme.onPrimary` and
+    // `colorScheme.primary`, which in dark mode are near-black ink and mint on
+    // cream (1.31:1 and 1.44:1). Imposing the light theme keeps every descendant
+    // — including ones added later — consistent with the surface it sits on.
+    return Theme(
+      data: _lightTheme,
+      // Builder, not a direct call: the styles below read `Theme.of(context)`,
+      // and the enclosing build context sits *above* the Theme that was just
+      // installed. Without a new context they would resolve the ambient dark
+      // theme again and the fix would be inert.
+      child: Builder(
+        builder: (context) => _build(context, palette: palette, cycle: cycle),
+      ),
+    );
+  }
+
+  /// Built once: [AppTheme.lightTheme] assembles a full [ThemeData] on every
+  /// call, and this scene rebuilds on each animation tick.
+  static final ThemeData _lightTheme = AppTheme.lightTheme;
+
+  Widget _build(
+    BuildContext context, {
+    required ZentraPalette palette,
+    required bool cycle,
+  }) {
     return ColoredBox(
       key: const ValueKey('focus_completion_dialog'),
       color: palette.functionalSurface,

@@ -345,18 +345,13 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
   }
 
   Future<void> _pickReminderTime() async {
-    final theme = Theme.of(context);
-    final categoryColor =
-        AppTheme.getCategoryColor(_selectedCategory, theme.colorScheme);
+    // No colorScheme override: the pickers inherit the app's teal primary. They
+    // used to be repainted with the category colour, which made the same dialog
+    // arrive blue or orange depending on an unrelated choice made earlier in
+    // the form.
     final time = await showTimePicker(
       context: context,
       initialTime: _reminderTime,
-      builder: (context, child) => Theme(
-        data: theme.copyWith(
-          colorScheme: theme.colorScheme.copyWith(primary: categoryColor),
-        ),
-        child: child!,
-      ),
     );
     if (time == null || !mounted) return;
     setState(() => _reminderTime = time);
@@ -364,22 +359,14 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
   }
 
   Future<void> _pickScheduledDate() async {
-    final theme = Theme.of(context);
-    final categoryColor =
-        AppTheme.getCategoryColor(_selectedCategory, theme.colorScheme);
     final now = _dateOnly(_now());
     final initialDate = _scheduledDate.isBefore(now) ? now : _scheduledDate;
+    // Teal by inheritance, for the same reason as [_pickReminderTime].
     final date = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: now,
       lastDate: DateTime(now.year + 2, 12, 31),
-      builder: (context, child) => Theme(
-        data: theme.copyWith(
-          colorScheme: theme.colorScheme.copyWith(primary: categoryColor),
-        ),
-        child: child!,
-      ),
     );
     if (date == null || !mounted) return;
     setState(() => _scheduledDate = _dateOnly(date));
@@ -565,7 +552,6 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
             _HabitFormHeader(
               title: _screenTitle,
               mode: _mode,
-              selectedCategory: _selectedCategory,
               isEditing: _isEditing,
               isDeleting: _isDeleting,
               onBack: () => Navigator.of(context).maybePop(),
@@ -678,7 +664,6 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
 class _HabitFormHeader extends StatelessWidget {
   final String title;
   final _HabitMode mode;
-  final Category selectedCategory;
   final bool isEditing;
   final bool isDeleting;
   final VoidCallback onBack;
@@ -688,7 +673,6 @@ class _HabitFormHeader extends StatelessWidget {
   const _HabitFormHeader({
     required this.title,
     required this.mode,
-    required this.selectedCategory,
     required this.isEditing,
     required this.isDeleting,
     required this.onBack,
@@ -699,12 +683,12 @@ class _HabitFormHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final horizontalPadding =
         MediaQuery.sizeOf(context).width < 360 ? 12.0 : 20.0;
-    final backgroundColor = isDark
-        ? context.zentraPalette.salviaFormHeader
-        : AppTheme.getCategoryTint(selectedCategory, Brightness.light);
+    // Fixed in both modes. The light band used to be the category tint, so the
+    // top of the screen changed colour every time the user tried a category —
+    // the loudest surface in the form reacting to the smallest decision in it.
+    final backgroundColor = context.zentraPalette.salviaFormHeader;
 
     return AnimatedContainer(
       key: const ValueKey('habit-form-header'),
@@ -1081,11 +1065,15 @@ class _CategoryOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = AppTheme.getSalviaCategoryColor(
-      category,
-      theme.brightness,
-    );
+    final palette = context.zentraPalette;
     final isDark = theme.brightness == Brightness.dark;
+    // One accent for the whole form — the same teal as the save button. The
+    // category used to colour the ring, the tint and the icon, so picking
+    // "Agua" repainted the form blue and "Movimiento" repainted it orange: the
+    // accent moved around while the user was still deciding. The glyph is what
+    // actually tells the categories apart, so it keeps that job alone and the
+    // teal is left to mean one thing only: this is the one you chose.
+    final accent = palette.brandTeal;
     return Semantics(
       button: true,
       selected: selected,
@@ -1104,19 +1092,22 @@ class _CategoryOption extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected
-                    ? color.withValues(alpha: isDark ? 0.18 : 0.12)
+                    ? accent.withValues(alpha: isDark ? 0.18 : 0.12)
                     : isDark
-                        ? context.zentraPalette.surfaceCard
+                        ? palette.surfaceCard
                         : Colors.white,
                 borderRadius: BorderRadius.circular(context.radii.medium),
                 border: Border.all(
-                  color: selected ? color : Colors.transparent,
+                  color: selected ? accent : Colors.transparent,
                   width: selected ? 2 : 1,
                 ),
               ),
               child: Icon(
                 AppTheme.getCategoryIcon(category),
-                color: color,
+                // With a single accent the colour can no longer say "this is
+                // Agua", so it says "this is the selected one" instead: teal
+                // when chosen, quiet ink when not.
+                color: selected ? accent : theme.colorScheme.onSurfaceVariant,
                 size: 26,
               ),
             ),
@@ -1283,8 +1274,6 @@ class _WeekdayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 6.0;
-        final cell = (constraints.maxWidth - gap * 6) / 7;
         Widget day(Weekday weekday) => _DayOption(
               key: ValueKey('habit-day-${weekday.value}'),
               weekday: weekday,
@@ -1292,36 +1281,27 @@ class _WeekdayRow extends StatelessWidget {
               informative: isOneTime,
               onTap: isOneTime ? null : () => onDayToggled(weekday.value),
             );
-        if (cell >= 42) {
-          return Row(
-            key: const ValueKey('habit-custom-days'),
-            children: [
-              for (var index = 0; index < Weekday.values.length; index++) ...[
-                if (index > 0) const SizedBox(width: gap),
-                Expanded(
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: day(Weekday.values[index]),
-                  ),
-                ),
-              ],
-            ],
-          );
-        }
-        return SingleChildScrollView(
+
+        // The week is a fixed set of seven: it always fits on one line. The
+        // previous version demanded 42dp per cell and fell back to a horizontal
+        // scroller below that, which on a 375dp phone left Sunday off the right
+        // edge with no hint that anything was there. Shrinking the gap before
+        // the cells keeps the circles as large as the width allows and keeps all
+        // seven reachable without scrolling.
+        final gap = constraints.maxWidth < 340 ? 4.0 : 6.0;
+        return Row(
           key: const ValueKey('habit-custom-days'),
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (var index = 0; index < Weekday.values.length; index++) ...[
-                if (index > 0) const SizedBox(width: gap),
-                SizedBox.square(
-                  dimension: 44,
+          children: [
+            for (var index = 0; index < Weekday.values.length; index++) ...[
+              if (index > 0) SizedBox(width: gap),
+              Expanded(
+                child: AspectRatio(
+                  aspectRatio: 1,
                   child: day(Weekday.values[index]),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         );
       },
     );

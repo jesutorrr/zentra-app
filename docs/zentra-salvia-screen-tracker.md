@@ -40,7 +40,7 @@ cada diálogo ni cada estado de carga.
 | 10 | Preparar enfoque | Activa | Portal, dial, presets y transición implementados; pendiente smoke nativo físico y aprobación final de Uri. |
 | 11 | Enfoque activo | Activa | Inmersión, pausa, descanso, salida segura y cierre implementados; pendiente smoke nativo físico y aprobación final de Uri. |
 | 12 | Historial de enfoque | Pendiente | Revisar jerarquía y estados vacíos. |
-| 13 | Progreso y logros | Pendiente | Evitar métricas duplicadas y validar eventos reales. |
+| 13 | Progreso y logros | Activa | Pulso Vivo 3.0 aprobado por Uri en Design Lab; pendiente adaptador productivo, goldens y Screen Reviewer. |
 | 14 | Historial de actividad | Pendiente | Revisar actividad, archivo y filtros. |
 | 15 | Calendario | Pendiente | Unificar resumen, leyenda y detalle diario. |
 | 16 | Perfil | Pendiente | Reducir cards sin esconder identidad ni cuenta. |
@@ -48,7 +48,7 @@ cada diálogo ni cada estado de carga.
 | 18 | Acerca de | Pendiente | Compactar información legal y de versión. |
 | 19 | Soporte | Pendiente | Confirmar si sigue como pantalla independiente. |
 
-Estado del corte: 3 superficies aprobadas, 8 activas y 8 pendientes. Las
+Estado del corte: 3 superficies aprobadas, 9 activas y 7 pendientes. Las
 superficies activas cuentan como pendientes hasta cerrar todos sus gates.
 
 ## Corte activo: Focus Portal + Silencio
@@ -157,6 +157,77 @@ Release en PASS. Siguen pendientes la aprobación estética de Uri y el recorrid
 físico de background, force quit, notificación, Live Activity y Dynamic Island.
 Ningún PASS técnico cambia estas dos superficies a `Aprobada` sin esas dos
 evidencias.
+
+## Cuatro defectos reportados sobre la Release física, 5 de agosto de 2026
+
+El usuario instaló la Release en su iPhone 15 Pro Max y reportó cuatro fallos con
+capturas. Los cuatro están corregidos.
+
+**1. El lanzador de Enfoque exigía scroll y escondía dos opciones.** «Otro» y
+«Nombrar esta sesión» quedaban 135 dp bajo el pliegue y nada en pantalla sugería
+que hubiera más. La medición —una prueba desechable que imprimía `getRect` y
+`maxScrollExtent` por tamaño— reveló dos causas que no se deducen leyendo el
+código: el titular no ocupaba dos líneas sino **cinco** (195 dp a 393 dp de
+ancho), y el dial se dimensionaba sólo por ancho, así que un teléfono de 375×667
+recibía 335 dp de dial, la mitad de su altura. Seis cambios coordinados dejaron
+`maxScrollExtent == 0` en 430×932, 393×852, 375×667, 360×640 y 320×568:
+
+- El selector Rápido/Ciclo subió al tope, antes del titular, igual que «Se repite
+  / Una sola vez» abre el formulario de hábito. Es lo que pidió el usuario y
+  además ordena la pantalla por ritmo antes que por retórica.
+- El titular pasó a una línea, «Una sola cosa», y perdió el subtítulo.
+- El dial se acota también contra la altura (`height * 0.42`, mínimo 240 dp). En
+  393 dp y más el tope por ancho sigue ganando, así que ahí mide exactamente lo
+  que siempre midió: 353 dp en 393, 372 dp en 430.
+- Los cuatro presets y «Otro» pasaron de `Wrap` a `Row` con `Expanded`. Un `Wrap`
+  que no cabe manda «Otro» a una segunda fila y cuesta 56 dp fijos; peor, deja la
+  opción de elegir cualquier otra duración sola en una fila que nadie mira.
+- En pantallas angostas los chips pierden ancho decorativo, nunca altura:
+  `VisualDensity.compact` los dejaba en 40 dp, bajo el mínimo táctil de 48. Se
+  descartó y se documentó por qué.
+- Los espaciados del sliver responden a `layout.isShort`.
+
+Dos mutaciones confirman que la prueba tiene dientes: restaurar el titular viejo
+falla con 46 dp de scroll en 393×852, y volver el dial a sólo-ancho falla con 14
+dp en 360×640.
+
+**2. Contraste perdido en «Enfoque completado».** Corregido y verificado con
+prueba de ratio.
+
+**3. Un acento único en el formulario de hábito.** El acento cambiaba por
+categoría: elegir «Agua» repintaba el formulario de azul y «Movimiento» de
+naranja, así que el color se movía mientras el usuario todavía estaba decidiendo.
+Ahora `_CategoryOption` usa `palette.brandTeal` —el mismo teal del botón de
+guardar— para anillo y relleno, y el icono dejó de comunicar categoría para
+comunicar selección. Los `showTimePicker`/`showDatePicker` perdieron su
+`colorScheme` override, que hacía llegar el mismo diálogo azul o naranja según
+una decisión anterior sin relación. La banda del encabezado quedó fija, y el
+token `salviaFormHeader` claro pasó de un melocotón que ya nadie pintaba a la
+familia teal (`0xFFDCEDE6`). El alcance fue deliberado: por decisión del usuario,
+sólo el formulario. Las tarjetas, la lista y Hoy conservan color por categoría, y
+sus once llamadas a `getCategoryColor`/`getSalviaCategoryColor`/`getCategoryTint`
+quedaron intactas. Los días de la semana ya caben completos, domingo incluido.
+
+**4. La Live Activity ahora tiene un héroe.** La línea más prominente del widget
+era `attributes.activityName`, truncada a «Sesión de enf…», y ese nombre es
+genérico por política de privacidad: gastaba el lugar de honor en no decir nada.
+Se eliminó de la pantalla bloqueada y de la región `.bottom` del Dynamic Island,
+y el contador ocupó su lugar a 46 pt redondeados sobre una etiqueta de etapa
+pequeña, la barra de progreso y «Al terminar». El icono de etapa medía **1.69:1**
+sobre el fondo crema, muy por debajo del 3.0:1 que necesita un glifo: pasó a deep
+green (4.80:1). El Dynamic Island conserva el mint a propósito, porque se dibuja
+sobre negro, donde el mint lee 11.24:1 y el deep green casi desaparece. El widget
+no puede importar `ZentraPalette`, así que un `private enum ZentraActivityPalette`
+espeja los pocos colores con sus ratios medidos en el comentario. `pausedProgress`
+ganó una guarda contra división por cero. El campo `activityName` sigue en
+`ZentraActivityAttributes` y en el puente Dart/Swift: el widget ya no lo lee, pero
+quitarlo de punta a punta rompería el contrato del puente sin ganar nada.
+
+Verificación: `flutter analyze` sin issues sobre todo el código versionado,
+`flutter test` 986 PASS y 5 SKIP, y el target `ZentraWidgetExtension` compila con
+`** BUILD SUCCEEDED **` en Release para `iphoneos`. Las dos pruebas que fallan en
+la corrida completa pertenecen a prototipos sin versionar de otra sesión
+(`progress_pulse`, `calendar_time_live`) y no tocan nada de este trabajo.
 
 ## Corte activo: nube estacionada
 

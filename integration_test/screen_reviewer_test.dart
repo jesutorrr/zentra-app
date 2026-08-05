@@ -537,8 +537,28 @@ Future<void> _reviewFocusScope(
     expected: find.byType(PomodoroScreen),
   );
   expect(find.byKey(const ValueKey('focus_portal')), findsOneWidget);
-  expect(find.text('Haz espacio para\nuna sola cosa'), findsOneWidget);
+  expect(find.text('Una sola cosa'), findsOneWidget);
   expect(find.text('Enfoque'), findsNothing);
+  // The launcher has to arrive whole: "Otro" and the naming button used to sit
+  // below the fold, so the capture showed a screen the user could not act on.
+  expect(
+    review.tester
+        .getRect(find.byKey(const ValueKey('pomodoro_mode_quick')))
+        .top,
+    lessThan(
+      review.tester
+          .getRect(find.byKey(const ValueKey('focus_portal_headline')))
+          .top,
+    ),
+  );
+  expect(
+    Scrollable.of(
+      review.tester.element(
+        find.byKey(const ValueKey('pomodoro_optional_context')),
+      ),
+    ).position.maxScrollExtent,
+    0,
+  );
   await review.capture('00-focus-portal-light');
 
   await review.tap(
