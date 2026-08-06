@@ -311,6 +311,43 @@ void main() {
     });
   }
 
+  testWidgets('las dos bandas nombran su pantalla sobre el selector',
+      (tester) async {
+    // La paridad no era sólo de color: el formulario de hábito se presentaba
+    // —flecha, nombre, una acción— y Enfoque no se presentaba, abría con un
+    // titular poético debajo del selector. Ahora las dos bandas dicen dónde
+    // estás en la misma fila y el selector va debajo en las dos.
+    await pump(tester, const HabitFormScreen());
+    final habitTitle = tester.getRect(find.text('Nuevo hábito'));
+    final habitSelector = tester.getRect(
+      find.byKey(const ValueKey('zentra-mode-selector')),
+    );
+    expect(habitTitle.bottom, lessThanOrEqualTo(habitSelector.top + 0.5));
+
+    harness = null;
+    await pump(tester, const PomodoroScreen());
+    final focusTitle = tester.getRect(
+      find.byKey(const ValueKey('focus_portal_headline')),
+    );
+    final focusSelector = tester.getRect(
+      find.byKey(const ValueKey('zentra-mode-selector')),
+    );
+    expect(find.text('Enfoque'), findsOneWidget);
+    expect(focusTitle.bottom, lessThanOrEqualTo(focusSelector.top + 0.5));
+
+    // Y una sola acción cierra la fila del título en las dos: ⋯ en el hábito,
+    // ⟲ en Enfoque. Dos accesos a lo mismo desde extremos opuestos —un ⚙ arriba
+    // y un «Otro» abajo— era el botón de más que se fue.
+    final history = find.byTooltip('Historial');
+    expect(history, findsOneWidget);
+    expect(tester.getCenter(history).dx, greaterThan(focusTitle.right));
+    expect(
+      tester.getCenter(history).dy,
+      closeTo(focusTitle.center.dy, 4),
+    );
+    expect(find.byTooltip('Ajustes de enfoque'), findsNothing);
+  });
+
   testWidgets('at huge text the halves stack instead of squeezing',
       (tester) async {
     // «Una sola vez» a escala grande no cabe junto a «Se repite»; apilar cuesta

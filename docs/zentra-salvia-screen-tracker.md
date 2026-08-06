@@ -307,6 +307,74 @@ con los mismos números medidos antes de escribir código: banda de vuelta a
 `#DCEDE6` → 3 fallos; riel de vuelta a blanco al 55% → 1.9758; título sin
 `color: onBand` → 2.9556.
 
+## La banda de Enfoque se presenta, 5 de agosto de 2026
+
+El usuario pidió cerrar el parangón: poner el nombre de la pantalla en la banda,
+acomodar el historial y los tiempos, y fusionar el chip «Otro» con los ajustes de
+Pomodoro «para deshacernos de un botón extra». Tres decisiones suyas gobiernan el
+alcance: «Enfoque» fijo con el titular «Una sola cosa» **eliminado** (no movido),
+una hoja de tiempos que **se adapta al modo**, y el historial como **⟲ solo** a la
+derecha de la banda. Diseño completo en
+`docs/superpowers/specs/2026-08-05-enfoque-banda-armoniosa-design.md`.
+
+**El botón de más era literal: había dos puertas a la misma conversación.** Un ⚙
+en la banda para los descansos del ciclo y un chip «Otro» al final de la fila de
+duraciones para el dial de minutos. Los dos hablan de tiempos, desde esquinas
+opuestas de la pantalla. Y en Ciclo la línea «4 enfoques · descansos de 5 y 15 min»
+decía exactamente lo que el usuario querría tocar y no se podía tocar. Ahora el
+resumen **es** el control: `_FocusTimesRow`, una fila de 48 dp que en Ciclo abre
+los tres tiempos y en Rápido ofrece lo único que queda por ajustar. Los sliders de
+descanso **no** aparecen en Rápido: `startQuickSession` nunca los consume, así que
+serían dos controles que no hacen nada sin manera de saberlo mirándolos.
+
+**El hallazgo que la prueba oficial no podía ver: el lanzador ya desbordaba en
+Ciclo, antes de este trabajo.** `maxScrollExtent` de 10.8 dp en 360×640 y 46.0 dp
+en 320×568, confirmado tocando «Ciclo» como lo haría el usuario. La prueba de
+«cabe en una pantalla sin scroll» de la corrección 1 sólo medía el modo por
+defecto —Rápido—, y el modo alto era justo el que no se medía. Ahora mide **los
+dos** en los cinco tamaños, y cambia de modo tocando en vez de llamando al
+controlador. Dos mutaciones lo confirman: subir la fila de tiempos a 96 dp falla
+con `320x568 Rápido: 36.0`; subirla sólo en Ciclo a 108 dp falla con
+`360x640 Ciclo: 8.8` después de que Rápido pasó en los cinco. Las dos ramas miden
+por su cuenta.
+
+**Quitar un chip le devolvió el ancho a los otros cuatro.** La fila era cinco
+cosas —cuatro números y una puerta— y eso starvaba a las cinco: los chips salían
+entre 45.3 y 56.0 dp y el dígito del seleccionado colapsaba a 0.0 dp. Sin «Otro»,
+cada chip pasó de ~16% a 25% del ancho: 56.0 dp con 28.0 dp de dígitos en los cinco
+tamaños. `maxScrollExtent == 0` en Rápido y Ciclo en 430×932, 393×852, 375×667,
+360×640 y 320×568, con holgura de 132 / 101.5 / 49.4 / 41.6 / 22.0 dp. El 320×568
+en Ciclo pasó de −46 dp a +22 dp.
+
+**Y un defecto que el usuario vio en la captura y yo no en la mía.** «El 5 inicia
+donde debería ser cero, luego el 15 y así no están donde debería estar». Dos
+causas. El pintor arrancaba en `0.045` para que 5 minutos no se viera vacío, y ese
+piso dejaba el pulgar **13.5° adelante** de la marca del 5. Y el arco medía de 5 a
+60, con lo que las marcas `5, 15, 30, 45, 60` caían en 0 / 18.2 / 45.5 / 72.7 /
+100%: el 30 descentrado, el 5 pegado al origen. Ahora el arco mide **de 0 a 60**
+—aunque sólo se pueda elegir de 5 a 60—, las marcas son `15, 30, 45, 60` en cuartos
+exactos, el 30 queda en 3π/2, y 5 minutos pinta 8.3% por su cuenta: el piso ya no
+hace falta. La causa de fondo era que la fórmula vivía copiada en **tres** lugares
+que tenían que estar de acuerdo y no lo estaban;
+`lib/presentation/widgets/focus_dial_geometry.dart` es la única fuente ahora.
+
+`test/widget/focus_dial_painter_test.dart` interroga el lienzo real con un
+`_RecordingCanvas implements Canvas` que captura `drawArc` y `drawCircle`, en vez
+de confiar en la aritmética de la prueba. Probado por mutación: reinsertar el piso
+falla con `Expected: within <0.000001> of <0.4363...> Actual: <0.2356...>`; devolver
+el `5` a las marcas falla con `Expected: within <0.001> of <0.25> Actual:
+<0.0833...>`. Y la primera versión de la prueba unitaria era `expect(angleFor(m),
+angleFor(m))` —tautológica— así que se reescribió para comparar contra la
+proporción cruda `minutos/60`, un camino independiente.
+
+`_PortalIntro` desapareció, y con él la columna izquierda del layout de tablet: el
+marco pasó de `maxWidth: 1040` a `560` y el portal se centra solo en vez de quedar
+pegado a un costado con un hueco enfrente. El dial fino (`_DurationDialSheet`) se
+conservó a propósito: ya no se alcanza desde la fila de duraciones, pero sí desde
+«Ajustar», que el portal ofrece a 200% de texto cuando la barra accesible se lleva
+el «Entrar». Es la única puerta que le queda a quien más la necesita, así que tiene
+prueba propia.
+
 ## Corte activo: nube estacionada
 
 La build vigente es local-only. Este corte afecta únicamente Acceso, Ajustes,

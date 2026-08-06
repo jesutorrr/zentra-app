@@ -408,16 +408,41 @@ void main() {
       find.byKey(const ValueKey('focus_portal_headline')),
       findsOneWidget,
     );
-    expect(find.text('Una sola cosa'), findsOneWidget);
-    expect(find.text('Enfoque'), findsNothing);
-    // Rhythm before headline: the mode selector is the first thing on the
-    // screen, the way "Se repite / Una sola vez" opens the habit form.
+    // La pantalla se nombra, y el titular poético se fue: «Una sola cosa» decía
+    // menos sobre dónde estás que el nombre del lugar, y costaba una línea que
+    // el modo Ciclo no tenía para dar.
+    expect(find.text('Enfoque'), findsOneWidget);
+    expect(find.text('Una sola cosa'), findsNothing);
+    // El nombre encabeza la banda y el selector va debajo, igual que
+    // `‹ Nuevo hábito … ⋯` abre el formulario con «Se repite / Una sola vez»
+    // debajo. Antes el selector iba primero porque el titular era largo y
+    // empujaba el modo hacia abajo.
     expect(
-      tester.getRect(quickMode).top,
-      lessThan(
+      tester
+          .getRect(find.byKey(const ValueKey('focus_portal_headline')))
+          .top,
+      lessThan(tester.getRect(quickMode).top),
+    );
+    // Y el historial cierra la fila del título, a su derecha: la misma acción
+    // única al final de la banda que el formulario de hábito pone en su ⋯.
+    final history = find.byTooltip('Historial');
+    expect(history, findsOneWidget);
+    expect(
+      tester.getCenter(history).dx,
+      greaterThan(
         tester
             .getRect(find.byKey(const ValueKey('focus_portal_headline')))
-            .top,
+            .right,
+      ),
+    );
+    expect(
+      tester.getCenter(history).dy,
+      closeTo(
+        tester
+            .getRect(find.byKey(const ValueKey('focus_portal_headline')))
+            .center
+            .dy,
+        4,
       ),
     );
     expect(find.text('Entrar'), findsOneWidget);
@@ -513,8 +538,12 @@ void main() {
     // the top edge and leaving the lower half empty. It centers in the space
     // below the top bar, so its middle lands in the middle third of the window
     // rather than exactly on the window center.
+    //
+    // El tope se mide en el dial, no en el título: el título subió a la banda,
+    // que por definición está pegada al borde superior. Medirlo ahí decía que el
+    // portal empezaba en el tope aunque el portal estuviera centrado.
     final portalTop =
-        tester.getRect(find.byKey(const ValueKey('focus_portal_headline'))).top;
+        tester.getRect(find.byKey(const ValueKey('focus_portal'))).top;
     final portalBottom = tester
         .getRect(find.byKey(const ValueKey('pomodoro_optional_context')))
         .bottom;
@@ -529,19 +558,13 @@ void main() {
     // "Nombrar esta sesión" are the two the user reported missing: they sat
     // 135dp below the fold behind a five-line headline, a subtitle and a dial
     // sized only by width, and nothing on screen suggested there was more.
-    for (final size in const <Size>[
-      Size(430, 932), // iPhone 15 Pro Max
-      Size(393, 852), // iPhone 15
-      Size(375, 667), // iPhone SE 2/3
-      Size(360, 640), // small Android
-      Size(320, 568), // iPhone SE 1
-    ]) {
-      currentHarness = null;
-      await configureDevice(tester, logicalSize: size);
-      await tester.pumpWidget(await buildApp(const PomodoroScreen()));
-      await tester.pump(const Duration(milliseconds: 600));
-
-      final label = '${size.width.toInt()}x${size.height.toInt()}';
+    //
+    // En LOS DOS MODOS. Esta prueba sólo medía el modo por defecto, y por eso no
+    // vio que el lanzador ya desbordaba en Ciclo: 10.8dp en 360x640 y 46.0dp en
+    // 320x568, confirmados tocando «Ciclo» como lo haría el usuario. Ciclo es el
+    // caso alto —la fila de tiempos crece a dos líneas con los descansos—, así
+    // que medir sólo Rápido deja fuera precisamente el que aprieta.
+    Future<void> assertFits(Size size, String label) async {
       final scroll = Scrollable.of(
         tester.element(find.byKey(const ValueKey('pomodoro_optional_context'))),
       ).position;
@@ -617,20 +640,60 @@ void main() {
         );
       }
 
-      // All five presets on one row: a second row is what pushed the naming
-      // button off the bottom, and it stranded "Otro" where nobody looks.
-      final presetTop = tester.getRect(
-        find.byKey(const ValueKey('pomodoro_duration_5')),
-      ).top;
+      // Los cuatro números en una fila, y los tiempos en la suya debajo. La fila
+      // de duraciones era de cinco: cuatro números y un «Otro» que no era un
+      // número, y esa mezcla dejaba a los cinco sin ancho —el dígito del chip
+      // elegido medía 0dp— además de esconder los descansos tras un ⚙ en la
+      // esquina opuesta.
+      final presets = <Rect>[
+        for (final preset in const <int>[5, 15, 25, 45])
+          tester.getRect(find.byKey(ValueKey('pomodoro_duration_$preset'))),
+      ];
+      for (final chip in presets.skip(1)) {
+        expect(
+          chip.top,
+          closeTo(presets.first.top, 1),
+          reason: '$label: los números no comparten una sola fila.',
+        );
+      }
+      final times = tester.getRect(
+        find.byKey(const ValueKey('pomodoro_custom_duration_button')),
+      );
       expect(
-        tester
-            .getRect(find.byKey(const ValueKey('pomodoro_custom_duration_button')))
-            .top,
-        closeTo(presetTop, 1),
-        reason: '$label: "Otro" cayó a una segunda fila.',
+        times.top,
+        greaterThanOrEqualTo(presets.first.bottom - 0.5),
+        reason: '$label: la fila de tiempos se metió entre los números.',
       );
 
       expect(tester.takeException(), isNull, reason: label);
+    }
+
+    for (final size in const <Size>[
+      Size(430, 932), // iPhone 15 Pro Max
+      Size(393, 852), // iPhone 15
+      Size(375, 667), // iPhone SE 2/3
+      Size(360, 640), // small Android
+      Size(320, 568), // iPhone SE 1
+    ]) {
+      currentHarness = null;
+      await configureDevice(tester, logicalSize: size);
+      await tester.pumpWidget(await buildApp(const PomodoroScreen()));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      final label = '${size.width.toInt()}x${size.height.toInt()}';
+      await assertFits(size, '$label Rápido');
+
+      // Cambiar de modo tocando, no llamando al controlador: el desborde de
+      // Ciclo se confirmó así, y es la única forma de medir lo que el usuario ve.
+      await tester.tap(find.byKey(const ValueKey('pomodoro_mode_cycle')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        find.textContaining('4 enfoques · descansos'),
+        findsOneWidget,
+        reason: '$label: tocar «Ciclo» no cambió de modo.',
+      );
+      await assertFits(size, '$label Ciclo');
     }
   });
 
@@ -742,16 +805,88 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Pomodoro custom duration uses a 60-minute dial', (tester) async {
+  testWidgets('la fila de tiempos abre una hoja que se adapta al modo',
+      (tester) async {
+    // El chip «Otro» abría un dial y un ⚙ en la banda abría los descansos: dos
+    // puertas a la misma conversación desde extremos opuestos de la pantalla.
+    // Ahora es una sola fila, y lo que ofrece depende del modo — en Rápido no
+    // hay descansos que ajustar, así que mostrar sus sliders serían dos
+    // controles que no hacen nada sin manera de saberlo mirándolos.
     await configureDevice(tester, logicalSize: const Size(390, 844));
     await tester.pumpWidget(await buildApp(const PomodoroScreen()));
     await tester.pump(const Duration(milliseconds: 500));
 
-    final customDuration =
-        find.byKey(const ValueKey('pomodoro_custom_duration_button'));
-    await tester.ensureVisible(customDuration);
+    final times = find.byKey(const ValueKey('pomodoro_custom_duration_button'));
+    expect(find.text('Otra duración'), findsOneWidget);
+    await tester.ensureVisible(times);
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(customDuration);
+    await tester.tap(times);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tu tiempo de enfoque'), findsOneWidget);
+    expect(find.text('De 5 a 60 minutos.'), findsOneWidget);
+    expect(find.text('Enfoque'), findsWidgets);
+    expect(find.text('Descanso corto'), findsNothing);
+    expect(find.text('Descanso largo'), findsNothing);
+    expect(find.text('25 min'), findsOneWidget);
+
+    // El slider de la hoja escribe en el mismo estado que los chips: 30 minutos
+    // aquí es el 30 de allá.
+    await tester.drag(find.byType(Slider), const Offset(400, 0));
+    await tester.pumpAndSettle();
+    expect(currentHarness!.pomodoroController.state.workDuration, 60);
+
+    await tester.tapAt(const Offset(195, 40));
+    await tester.pumpAndSettle();
+    expect(find.text('Tu tiempo de enfoque'), findsNothing);
+
+    // En Ciclo la misma fila dice lo que hay puesto y abre los tres tiempos.
+    await tester.tap(find.byKey(const ValueKey('pomodoro_mode_cycle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('4 enfoques · descansos'), findsOneWidget);
+
+    await tester.ensureVisible(times);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(times);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tiempos del ciclo'), findsOneWidget);
+    expect(
+      find.text('Los cambios se aplican a la siguiente etapa.'),
+      findsOneWidget,
+    );
+    expect(find.text('Descanso corto'), findsOneWidget);
+    expect(find.text('Descanso largo'), findsOneWidget);
+    expect(find.byType(Slider), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('el dial fino sigue alcanzable cuando el portal cede su botón',
+      (tester) async {
+    // A 200% de texto la barra accesible se lleva el «Entrar», y el portal ofrece
+    // «Ajustar» en su lugar: es la única puerta que queda al dial de 60 minutos,
+    // así que si se rompe, el dial deja de existir para quien más lo necesita.
+    await configureDevice(tester, logicalSize: const Size(390, 844));
+    await tester.pumpWidget(
+      await buildApp(const PomodoroScreen(), textScale: 2),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Acotado al portal: la barra accesible reutiliza esa misma key para su
+    // propio botón, así que buscarla en toda la pantalla la encuentra siempre y
+    // no diría nada sobre quién la tiene.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('focus_portal')),
+        matching: find.byKey(const ValueKey('pomodoro_start_button')),
+      ),
+      findsNothing,
+    );
+    expect(find.text('Iniciar enfoque'), findsOneWidget);
+    final fineTune = find.text('Ajustar');
+    expect(fineTune, findsOneWidget);
+    await tester.tap(fineTune);
     await tester.pumpAndSettle();
 
     expect(

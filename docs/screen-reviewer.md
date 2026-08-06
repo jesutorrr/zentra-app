@@ -21,7 +21,7 @@ producción sobre simuladores reales. En cada parada:
 8. Mis hábitos con estado activo, búsqueda y archivados
 9. Notas: biblioteca, búsqueda, nota en lectura, nota en escritura y
     recordatorio
-10. Enfoque rápido, dial de duración, ciclo Pomodoro, sesión activa,
+10. Enfoque rápido, tiempos en Rápido y en Ciclo, ciclo Pomodoro, sesión activa,
     pausa e historial
 11. Progreso, colección de logros, actividad durable y archivo de tareas
 12. Calendario
@@ -132,9 +132,14 @@ Para revisar únicamente el contrato `Portal + Silencio` de Enfoque:
   --scope focus
 ```
 
-Este scope genera 12 capturas por dispositivo: portal, dial, ciclo, campo de
-nombre vacío, sesión nombrada, sesión activa, pausa, salida segura, descanso,
-portal AMOLED, sesión AMOLED y sello de cierre. El campo de nombre tiene dos
+Este scope genera 13 capturas por dispositivo: portal, hoja de tiempos en Rápido,
+ciclo, hoja de tiempos en Ciclo, campo de nombre vacío, sesión nombrada, sesión
+activa, pausa, salida segura, descanso, portal AMOLED, sesión AMOLED y sello de
+cierre. La hoja de tiempos tiene dos capturas porque es una sola fila la que
+abre lo que antes abrían un ⚙ en la banda y un chip «Otro» al final de las
+duraciones, y su contenido depende del modo: sólo el dial en Rápido, dial más
+los dos descansos en Ciclo. Mirar únicamente la de Rápido dejaría sin evidencia
+la mitad que justificó la fusión. El campo de nombre tiene dos
 capturas porque su altura al recibir el foco ya desbordó el portal una vez, y
 mirar sólo el campo lleno no lo habría mostrado. La parada del portal afirma
 además que el selector Rápido/Ciclo va antes del titular y que

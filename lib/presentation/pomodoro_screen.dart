@@ -13,6 +13,7 @@ import 'pomodoro_history_screen.dart';
 import 'theme.dart';
 import 'utils/feedback_utils.dart';
 import 'widgets/ambient_background.dart';
+import 'widgets/focus_dial_geometry.dart';
 import 'widgets/mode_band.dart';
 import 'widgets/responsive_layout.dart';
 
@@ -229,6 +230,16 @@ class _FocusLauncherState extends State<_FocusLauncher> {
     if (result != null) await widget.controller.setWorkDuration(result);
   }
 
+  /// Los tiempos, desde la fila que habla de ellos.
+  ///
+  /// Antes eran dos entradas: un ⚙ en la banda para los descansos y un chip
+  /// «Otro» para la duración. Son la misma conversación, así que ahora es una
+  /// sola hoja que se adapta al modo.
+  void _openFocusTimes() {
+    triggerHaptic(HapticType.light);
+    _showFocusSettings(context, widget.provider, widget.controller);
+  }
+
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
@@ -275,8 +286,7 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                             children: [
                               _FocusTopBar(
                                 provider: widget.provider,
-                                controller: widget.controller,
-                                showSettings: true,
+                                showTitle: true,
                                 foreground:
                                     ZentraModeBand.foregroundOf(context),
                               ),
@@ -328,80 +338,42 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                                   ? context.spacing.md
                                   : context.spacing.xxl,
                             ),
+                            // El titular «Una sola cosa» vivía aquí, y en una
+                            // ventana ancha ocupaba la columna izquierda con el
+                            // portal a su derecha. La pantalla ya se nombra en
+                            // la banda, así que la columna se fue con él: el
+                            // portal se centra solo, en teléfono y en tablet,
+                            // en lugar de quedar pegado a un costado con un
+                            // hueco enfrente.
                             child: ResponsiveContentFrame(
                               alignment: Alignment.center,
-                              maxWidth: 1040,
+                              maxWidth: 560,
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   if (!layout.isShort)
                                     SizedBox(height: context.spacing.md),
-                                  if (layout.isExpanded)
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child: _PortalIntro(
-                                            provider: widget.provider,
-                                            controller: widget.controller,
-                                          ),
-                                        ),
-                                        SizedBox(width: context.spacing.xxl),
-                                        Expanded(
-                                          child: _PortalConfiguration(
-                                            provider: widget.provider,
-                                            controller: widget.controller,
-                                            titleController: _titleController,
-                                            titleFocus: _titleFocus,
-                                            linkedNoteId: _linkedNoteId,
-                                            linkedNoteTitle: _linkedNoteTitle,
-                                            contextExpanded: _contextExpanded,
-                                            presets: _presets,
-                                            isEntering: _isEntering,
-                                            showStart: widget.showPortalStart,
-                                            onStart: _start,
-                                            onOpenDial: _openDurationDial,
-                                            onToggleContext: _toggleContext,
-                                            onRemoveLink: () => setState(() {
-                                              _linkedNoteId = null;
-                                              _linkedNoteTitle = null;
-                                            }),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  else ...[
-                                    _PortalIntro(
-                                      provider: widget.provider,
-                                      controller: widget.controller,
-                                    ),
-                                    SizedBox(
-                                      height: layout.isShort
-                                          ? context.spacing.xs
-                                          : context.spacing.md,
-                                    ),
-                                    _PortalConfiguration(
-                                      provider: widget.provider,
-                                      controller: widget.controller,
-                                      titleController: _titleController,
-                                      titleFocus: _titleFocus,
-                                      linkedNoteId: _linkedNoteId,
-                                      linkedNoteTitle: _linkedNoteTitle,
-                                      contextExpanded: _contextExpanded,
-                                      presets: _presets,
-                                      isEntering: _isEntering,
-                                      showStart: widget.showPortalStart,
-                                      onStart: _start,
-                                      onOpenDial: _openDurationDial,
-                                      onToggleContext: _toggleContext,
-                                      onRemoveLink: () => setState(() {
-                                        _linkedNoteId = null;
-                                        _linkedNoteTitle = null;
-                                      }),
-                                    ),
-                                  ],
+                                  _PortalConfiguration(
+                                    provider: widget.provider,
+                                    controller: widget.controller,
+                                    titleController: _titleController,
+                                    titleFocus: _titleFocus,
+                                    linkedNoteId: _linkedNoteId,
+                                    linkedNoteTitle: _linkedNoteTitle,
+                                    contextExpanded: _contextExpanded,
+                                    presets: _presets,
+                                    isEntering: _isEntering,
+                                    showStart: widget.showPortalStart,
+                                    onStart: _start,
+                                    onOpenDial: _openDurationDial,
+                                    onOpenTimes: _openFocusTimes,
+                                    onToggleContext: _toggleContext,
+                                    onRemoveLink: () => setState(() {
+                                      _linkedNoteId = null;
+                                      _linkedNoteTitle = null;
+                                    }),
+                                  ),
                                 ],
                               ),
                             ),
@@ -420,17 +392,24 @@ class _FocusLauncherState extends State<_FocusLauncher> {
   }
 }
 
+/// La fila de navegación de Enfoque: `‹ Enfoque … ⟲`.
+///
+/// El mismo esqueleto que abre el formulario de hábito —flecha, título, una
+/// acción— con el selector de modo debajo. El título vive dentro de la fila de
+/// 48dp que ya existía, así que nombrar la pantalla no le costó altura a nada.
+///
+/// Aquí vivía también un ⚙ para los tiempos del ciclo. Se fue a la fila de
+/// abajo, junto a la duración, que es de lo que hablaba: dos accesos a lo mismo
+/// desde extremos opuestos de la pantalla eran un botón de más.
 class _FocusTopBar extends StatelessWidget {
   final PomodoroViewState provider;
-  final PomodoroController controller;
-  final bool showSettings;
+  final bool showTitle;
   final Color? foreground;
   final VoidCallback? onBack;
 
   const _FocusTopBar({
     required this.provider,
-    required this.controller,
-    required this.showSettings,
+    required this.showTitle,
     this.foreground,
     this.onBack,
   });
@@ -458,7 +437,25 @@ class _FocusTopBar extends StatelessWidget {
           )
         else
           const SizedBox(width: 48),
-        const Spacer(),
+        if (showTitle)
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(left: context.spacing.sm),
+              child: Text(
+                'Enfoque',
+                key: const ValueKey('focus_portal_headline'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.4,
+                      color: foreground,
+                    ),
+              ),
+            ),
+          )
+        else
+          const Spacer(),
         IconButton.outlined(
           tooltip: 'Historial',
           style: iconStyle,
@@ -472,67 +469,7 @@ class _FocusTopBar extends StatelessWidget {
           },
           icon: const Icon(Icons.history_rounded),
         ),
-        if (showSettings) ...[
-          SizedBox(width: context.spacing.xs),
-          IconButton.outlined(
-            tooltip: 'Configurar tiempos',
-            style: iconStyle,
-            onPressed: () => _showFocusSettings(
-              context,
-              provider,
-              controller,
-            ),
-            icon: const Icon(Icons.tune_rounded),
-          ),
-        ],
       ],
-    );
-  }
-}
-
-class _PortalIntro extends StatelessWidget {
-  final PomodoroViewState provider;
-  final PomodoroController controller;
-
-  const _PortalIntro({
-    required this.provider,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    // A short phone has no room to spend on a display-size headline; it shrinks
-    // so the portal below it stays whole rather than trailing off the bottom
-    // edge. Below 360dp it shrinks again: at 28px the three words wrapped to a
-    // second line, which costs another 30dp on the screen that has the least.
-    final screen = MediaQuery.sizeOf(context);
-    final short = screen.height < 700;
-    final headline = !short
-        ? theme.textTheme.displaySmall
-        : screen.width < 360
-            ? theme.textTheme.headlineSmall
-            : theme.textTheme.headlineMedium;
-    // Rápido / Ciclo used to sit here, first, because picking the rhythm is the
-    // decision that changes what the rest of the screen means. It still comes
-    // first — it just moved up into the band, which is where the habit form
-    // keeps the same choice.
-    //
-    // One line, and no subtitle under it. The old copy carried a hard line break
-    // and still wrapped: five lines at 393dp, 195dp of headline, which together
-    // with the subtitle pushed "Otro" and the naming button 135dp below the fold
-    // on the very screen where they are the two options worth discovering.
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: Text(
-        'Una sola cosa',
-        key: const ValueKey('focus_portal_headline'),
-        style: headline?.copyWith(
-          fontWeight: FontWeight.w500,
-          height: 1.08,
-          letterSpacing: -1.8,
-        ),
-      ),
     );
   }
 }
@@ -587,6 +524,7 @@ class _PortalConfiguration extends StatelessWidget {
   final bool showStart;
   final VoidCallback onStart;
   final VoidCallback onOpenDial;
+  final VoidCallback onOpenTimes;
   final VoidCallback onToggleContext;
   final VoidCallback onRemoveLink;
 
@@ -603,6 +541,7 @@ class _PortalConfiguration extends StatelessWidget {
     required this.showStart,
     required this.onStart,
     required this.onOpenDial,
+    required this.onOpenTimes,
     required this.onToggleContext,
     required this.onRemoveLink,
   });
@@ -613,12 +552,14 @@ class _PortalConfiguration extends StatelessWidget {
     // VisualDensity.compact they came out 40dp tall, under the 48dp tap target,
     // which is not a trade worth making for one row of layout.
     final narrow = MediaQuery.sizeOf(context).width < 360;
-    // Tight at every width, not only below 360dp. Five chips sharing one row
-    // never get their intrinsic width — not even on a 430dp screen — so the
-    // default 20dp of air per side comes out of the label instead: measured, the
-    // digits fell to 9.3dp at 360 and 0dp at 393 once selected. Keying this to a
-    // device width was a guess about the phone when the squeeze belongs to the
-    // row, and it made the chips change shape at an invisible threshold.
+    // Tight at every width, not only below 360dp. When "Otro" shared this row
+    // the five chips never got their intrinsic width — not even on a 430dp
+    // screen — so the default 20dp of air per side came out of the label
+    // instead: measured, the digits fell to 9.3dp at 360 and 0dp at 393 once
+    // selected. "Otro" is a row of its own now and each chip went from ~16% to
+    // 25% of the width, but the padding stays tight: it is what keeps 320dp
+    // honest, and keying it to a device width was a guess about the phone when
+    // the squeeze belongs to the row.
     const labelPadding = EdgeInsets.symmetric(horizontal: 2);
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.8,
@@ -644,9 +585,15 @@ class _PortalConfiguration extends StatelessWidget {
             narrow: narrow,
             labelPadding: labelPadding,
             onSelect: controller.setWorkDuration,
-            onOpenDial: onOpenDial,
           ),
-          SizedBox(height: context.spacing.sm),
+          SizedBox(height: narrow ? context.spacing.xxs : context.spacing.xs),
+          _FocusTimesRow(
+            isCycle: provider.isCycleMode,
+            shortBreak: provider.shortBreakDuration,
+            longBreak: provider.longBreakDuration,
+            onOpen: onOpenTimes,
+          ),
+          SizedBox(height: context.spacing.xs),
           _OptionalFocusContext(
             expanded: contextExpanded,
             titleController: titleController,
@@ -656,39 +603,88 @@ class _PortalConfiguration extends StatelessWidget {
             onToggle: onToggleContext,
             onRemoveLink: onRemoveLink,
           ),
-          if (provider.isCycleMode) ...[
-            SizedBox(height: context.spacing.sm),
-            Text(
-              '4 enfoques · descansos de ${provider.shortBreakDuration} y '
-              '${provider.longBreakDuration} min',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-/// The four presets and "Otro" on a single row.
+/// La fila de los tiempos: lo que hay puesto, y la manera de cambiarlo.
+///
+/// En Ciclo esto era una leyenda —«4 enfoques · descansos de 5 y 15 min»— que
+/// decía exactamente lo que el usuario querría tocar y no se podía tocar; los
+/// ajustes vivían tras un ⚙ en la esquina opuesta de la pantalla. Ahora el
+/// resumen ES el control. En Rápido no hay descansos que resumir, así que la
+/// misma fila ofrece lo único que queda por ajustar: otra duración.
+class _FocusTimesRow extends StatelessWidget {
+  final bool isCycle;
+  final int shortBreak;
+  final int longBreak;
+  final VoidCallback onOpen;
+
+  const _FocusTimesRow({
+    required this.isCycle,
+    required this.shortBreak,
+    required this.longBreak,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final label = isCycle
+        ? '4 enfoques · descansos de $shortBreak y $longBreak min'
+        : 'Otra duración';
+
+    return TextButton(
+      key: const ValueKey('pomodoro_custom_duration_button'),
+      onPressed: onOpen,
+      style: TextButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        minimumSize: const Size.fromHeight(48),
+        padding: EdgeInsets.symmetric(horizontal: context.spacing.sm),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.radii.medium),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.tune_rounded, size: 18),
+          SizedBox(width: context.spacing.xs),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
+/// The four presets on a single row: choosing a duration, and nothing else.
 ///
 /// They used to be a centered [Wrap], which is fine until the row does not fit:
-/// then "Otro" drops to a second line, and the whole portal grows by 56dp. On a
-/// 320dp screen that was exactly what pushed the naming button off the bottom
-/// edge, and it left the option to pick any other duration sitting alone on a
-/// row the user had no reason to look for. The chips are all short labels, so
-/// letting them share the width equally keeps one row down to 320dp without
-/// shrinking any tap target below 48dp.
+/// then the last chip drops to a second line, and the whole portal grows by
+/// 56dp. On a 320dp screen that was exactly what pushed the naming button off
+/// the bottom edge. Sharing the width equally keeps one row down to 320dp
+/// without shrinking any tap target below 48dp.
+///
+/// "Otro" used to be a fifth chip here, which made the row two things at once —
+/// four numbers and a doorway — and starved all five of width. It is a row of
+/// its own now, next to the times it opens.
 class _DurationPresets extends StatelessWidget {
   final List<int> presets;
   final int selected;
   final bool narrow;
   final EdgeInsets? labelPadding;
   final ValueChanged<int> onSelect;
-  final VoidCallback onOpenDial;
 
   const _DurationPresets({
     required this.presets,
@@ -696,7 +692,6 @@ class _DurationPresets extends StatelessWidget {
     required this.narrow,
     required this.labelPadding,
     required this.onSelect,
-    required this.onOpenDial,
   });
 
   @override
@@ -710,37 +705,23 @@ class _DurationPresets extends StatelessWidget {
           selected: selected == preset,
           labelPadding: labelPadding,
           // No checkmark at any width. It widens whichever chip is selected,
-          // and once the five chips share the row equally there is no width to
-          // widen into: the label got squeezed to 0dp and the digits came out
-          // under the tick. This was already the reasoning below 360dp — the
-          // fill says which one is chosen, and so does its selected semantics —
-          // and the only thing the wider screens did differently was have
-          // enough room to hide the defect from a 320dp test.
+          // and when the chips share the row equally there is no width to widen
+          // into: the label got squeezed to 0dp and the digits came out under
+          // the tick. The fill says which one is chosen, and so does its
+          // selected semantics.
           showCheckmark: false,
           onSelected: (_) {
             triggerHaptic(HapticType.selection);
             onSelect(preset);
           },
         ),
-      ActionChip(
-        key: const ValueKey('pomodoro_custom_duration_button'),
-        avatar: narrow ? null : const Icon(Icons.tune_rounded, size: 18),
-        label: const Text('Otro', textAlign: TextAlign.center),
-        labelPadding: labelPadding,
-        onPressed: onOpenDial,
-      ),
     ];
 
     return Row(
       children: [
         for (var index = 0; index < chips.length; index++) ...[
           if (index > 0) SizedBox(width: gap),
-          // "Otro" carries a word where the others carry two digits, so an even
-          // split would starve it. Giving it two shares keeps the row balanced.
-          Expanded(
-            flex: index == chips.length - 1 ? 2 : 1,
-            child: Align(child: chips[index]),
-          ),
+          Expanded(child: Align(child: chips[index])),
         ],
       ],
     );
@@ -764,24 +745,6 @@ class _PortalDial extends StatelessWidget {
     required this.onStart,
   });
 
-  int _minutesFromPosition(Offset position, Size size) {
-    final center = size.center(Offset.zero);
-    final vector = position - center;
-    const start = math.pi * 2 / 3;
-    const sweep = math.pi * 5 / 3;
-    var relative = math.atan2(vector.dy, vector.dx) - start;
-    while (relative < 0) {
-      relative += math.pi * 2;
-    }
-    while (relative >= math.pi * 2) {
-      relative -= math.pi * 2;
-    }
-    if (relative > sweep) {
-      relative = relative - sweep < math.pi * 2 - relative ? sweep : 0;
-    }
-    return (5 + ((relative / sweep) * 11).round() * 5).clamp(5, 60);
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = context.zentraPalette;
@@ -796,11 +759,13 @@ class _PortalDial extends StatelessWidget {
       math.min(372.0, screen.width - 40),
       math.max(240.0, screen.height * 0.42),
     );
-    final normalized = (minutes - 5) / 55;
-    final paintedProgress = 0.045 + normalized * 0.955;
+    final paintedProgress = FocusDialGeometry.fractionFor(minutes);
 
     void update(Offset position) {
-      final next = _minutesFromPosition(position, Size.square(size));
+      final next = FocusDialGeometry.minutesFromOffset(
+        position,
+        Size.square(size),
+      );
       if (next == minutes) return;
       HapticFeedback.selectionClick();
       onChanged(next);
@@ -945,8 +910,8 @@ class _PortalDialPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final radius = math.min(size.width, size.height) / 2 - 38;
     final rect = Rect.fromCircle(center: center, radius: radius);
-    const start = math.pi * 2 / 3;
-    const sweep = math.pi * 5 / 3;
+    const start = FocusDialGeometry.startAngle;
+    const sweep = FocusDialGeometry.sweepAngle;
     final base = Paint()
       ..color = track
       ..style = PaintingStyle.stroke
@@ -967,9 +932,8 @@ class _PortalDialPainter extends CustomPainter {
       foreground,
     );
 
-    for (final minute in const [5, 15, 30, 45, 60]) {
-      final fraction = (minute - 5) / 55;
-      final angle = start + sweep * fraction;
+    for (final minute in FocusDialGeometry.marks) {
+      final angle = FocusDialGeometry.angleFor(minute);
       final mark = Offset(
         center.dx + math.cos(angle) * radius,
         center.dy + math.sin(angle) * radius,
@@ -1154,9 +1118,7 @@ class _DurationDialSheetState extends State<_DurationDialSheet> {
     _minutes = _snap(widget.initialMinutes);
   }
 
-  static int _snap(int minutes) {
-    return ((minutes.clamp(5, 60) / 5).round() * 5).clamp(5, 60);
-  }
+  static int _snap(int minutes) => FocusDialGeometry.snap(minutes);
 
   void _setMinutes(int value) {
     final next = _snap(value);
@@ -1166,21 +1128,7 @@ class _DurationDialSheetState extends State<_DurationDialSheet> {
   }
 
   void _updateFromPosition(Offset position, Size size) {
-    final center = size.center(Offset.zero);
-    final vector = position - center;
-    const start = math.pi * 2 / 3;
-    const sweep = math.pi * 5 / 3;
-    var relative = math.atan2(vector.dy, vector.dx) - start;
-    while (relative < 0) {
-      relative += math.pi * 2;
-    }
-    while (relative >= math.pi * 2) {
-      relative -= math.pi * 2;
-    }
-    if (relative > sweep) {
-      relative = relative - sweep < math.pi * 2 - relative ? sweep : 0;
-    }
-    _setMinutes(5 + ((relative / sweep) * 11).round() * 5);
+    _setMinutes(FocusDialGeometry.minutesFromOffset(position, size));
   }
 
   @override
@@ -1188,7 +1136,7 @@ class _DurationDialSheetState extends State<_DurationDialSheet> {
     final scheme = Theme.of(context).colorScheme;
     final focus = context.zentraPalette.focus;
     final size = math.min(280.0, MediaQuery.sizeOf(context).width - 64);
-    final progress = 0.045 + ((_minutes - 5) / 55) * 0.955;
+    final progress = FocusDialGeometry.fractionFor(_minutes);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -1394,8 +1342,9 @@ class _ImmersiveFocusSceneState extends State<_ImmersiveFocusScene> {
                   children: [
                     _FocusTopBar(
                       provider: state,
-                      controller: widget.controller,
-                      showSettings: false,
+                      // La sesión corriendo no se titula: el contador es el
+                      // héroe y la pantalla ya no es un lanzador.
+                      showTitle: false,
                       foreground: foreground,
                       onBack: _offerExit,
                     ),
@@ -2045,6 +1994,7 @@ class _FocusSettingsSheetState extends State<_FocusSettingsSheet> {
   late int _focus;
   late int _shortBreak;
   late int _longBreak;
+  late bool _isCycle;
 
   @override
   void initState() {
@@ -2052,10 +2002,14 @@ class _FocusSettingsSheetState extends State<_FocusSettingsSheet> {
     _focus = widget.provider.workDuration;
     _shortBreak = widget.provider.shortBreakDuration;
     _longBreak = widget.provider.longBreakDuration;
+    // El modo se lee al abrir y no cambia mientras la hoja vive: el selector
+    // queda detrás del velo, así que la hoja no puede cambiar de forma sola.
+    _isCycle = widget.provider.isCycleMode;
   }
 
   @override
   Widget build(BuildContext context) {
+    final isCycle = _isCycle;
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         context.spacing.lg,
@@ -2068,14 +2022,17 @@ class _FocusSettingsSheetState extends State<_FocusSettingsSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Tiempos del ciclo',
+            isCycle ? 'Tiempos del ciclo' : 'Tu tiempo de enfoque',
+            key: const ValueKey('focus_times_sheet_title'),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
           ),
           SizedBox(height: context.spacing.xxs),
           Text(
-            'Los cambios se aplican a la siguiente etapa.',
+            isCycle
+                ? 'Los cambios se aplican a la siguiente etapa.'
+                : 'De 5 a 60 minutos.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -2094,30 +2051,35 @@ class _FocusSettingsSheetState extends State<_FocusSettingsSheet> {
               widget.controller.setWorkDuration(snapped);
             },
           ),
-          _DurationSetting(
-            label: 'Descanso corto',
-            value: _shortBreak,
-            min: 1,
-            max: 15,
-            divisions: 14,
-            color: context.zentraPalette.water,
-            onChanged: (value) {
-              setState(() => _shortBreak = value);
-              widget.controller.setShortBreakDuration(value);
-            },
-          ),
-          _DurationSetting(
-            label: 'Descanso largo',
-            value: _longBreak,
-            min: 5,
-            max: 30,
-            divisions: 25,
-            color: context.zentraPalette.sleep,
-            onChanged: (value) {
-              setState(() => _longBreak = value);
-              widget.controller.setLongBreakDuration(value);
-            },
-          ),
+          // Los descansos sólo existen en Ciclo: `startQuickSession` nunca los
+          // consume. Mostrarlos en Rápido serían dos controles que no hacen
+          // nada, y el usuario no tiene manera de saberlo mirándolos.
+          if (isCycle) ...[
+            _DurationSetting(
+              label: 'Descanso corto',
+              value: _shortBreak,
+              min: 1,
+              max: 15,
+              divisions: 14,
+              color: context.zentraPalette.water,
+              onChanged: (value) {
+                setState(() => _shortBreak = value);
+                widget.controller.setShortBreakDuration(value);
+              },
+            ),
+            _DurationSetting(
+              label: 'Descanso largo',
+              value: _longBreak,
+              min: 5,
+              max: 30,
+              divisions: 25,
+              color: context.zentraPalette.sleep,
+              onChanged: (value) {
+                setState(() => _longBreak = value);
+                widget.controller.setLongBreakDuration(value);
+              },
+            ),
+          ],
         ],
       ),
     );

@@ -2,13 +2,16 @@ import 'dart:convert';
 import 'dart:io';
 
 const _fullExpectedScreenshotCount = 42;
+// «focus» pasó de 12 a 13: la hoja de tiempos se captura en los dos modos, que es
+// la diferencia que importa desde que una sola fila abre lo que antes abrían un ⚙
+// y un chip «Otro».
 const _scopedExpectedScreenshotCounts = <String, int>{
   'entry': 9,
   'habits': 4,
   'onboarding': 6,
   'habit-form': 8,
   'notes': 10,
-  'focus': 12,
+  'focus': 13,
 };
 
 Future<void> main(List<String> arguments) async {

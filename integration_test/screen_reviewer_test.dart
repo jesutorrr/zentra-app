@@ -537,17 +537,21 @@ Future<void> _reviewFocusScope(
     expected: find.byType(PomodoroScreen),
   );
   expect(find.byKey(const ValueKey('focus_portal')), findsOneWidget);
-  expect(find.text('Una sola cosa'), findsOneWidget);
-  expect(find.text('Enfoque'), findsNothing);
-  // The launcher has to arrive whole: "Otro" and the naming button used to sit
-  // below the fold, so the capture showed a screen the user could not act on.
+  // La pantalla se nombra en la banda: `‹ Enfoque … ⟲`, el mismo esqueleto con
+  // que abre el formulario de hábito. El titular «Una sola cosa» se fue con la
+  // columna que ocupaba.
+  expect(find.text('Enfoque'), findsOneWidget);
+  expect(find.text('Una sola cosa'), findsNothing);
+  // The launcher has to arrive whole: the times row and the naming button used
+  // to sit below the fold, so the capture showed a screen the user could not act
+  // on.
   expect(
     review.tester
-        .getRect(find.byKey(const ValueKey('pomodoro_mode_quick')))
+        .getRect(find.byKey(const ValueKey('focus_portal_headline')))
         .top,
     lessThan(
       review.tester
-          .getRect(find.byKey(const ValueKey('focus_portal_headline')))
+          .getRect(find.byKey(const ValueKey('pomodoro_mode_quick')))
           .top,
     ),
   );
@@ -561,19 +565,30 @@ Future<void> _reviewFocusScope(
   );
   await review.capture('00-focus-portal-light');
 
+  // Una sola puerta a los tiempos, y lo que ofrece depende del modo. En Rápido
+  // sólo hay duración que ajustar.
   await review.tap(
     find.byKey(const ValueKey('pomodoro_custom_duration_button')),
   );
-  expect(
-    find.byKey(const ValueKey('pomodoro_duration_dial')),
-    findsOneWidget,
-  );
-  await review.capture('01-focus-duration-dial-light');
-  await review.tap(find.byKey(const ValueKey('pomodoro_duration_apply')));
+  expect(find.text('Tu tiempo de enfoque'), findsOneWidget);
+  expect(find.text('Descanso corto'), findsNothing);
+  await review.capture('01-focus-times-quick-light');
+  await review.backTo<PomodoroScreen>();
 
   await review.tap(find.byKey(const ValueKey('pomodoro_mode_cycle')));
   expect(find.textContaining('4 enfoques · descansos'), findsOneWidget);
   await review.capture('02-focus-cycle-light');
+
+  // En Ciclo la misma fila abre los tres tiempos: el resumen ES el control, en
+  // lugar de una leyenda que decía lo que había que tocar y no se podía tocar.
+  await review.tap(
+    find.byKey(const ValueKey('pomodoro_custom_duration_button')),
+  );
+  expect(find.text('Tiempos del ciclo'), findsOneWidget);
+  expect(find.text('Descanso corto'), findsOneWidget);
+  expect(find.text('Descanso largo'), findsOneWidget);
+  await review.capture('02b-focus-times-cycle-light');
+  await review.backTo<PomodoroScreen>();
 
   await review.tap(find.byKey(const ValueKey('pomodoro_mode_quick')));
 
@@ -997,12 +1012,9 @@ Future<void> _reviewAuthenticatedJourney(
   await review.tap(
     find.byKey(const ValueKey('pomodoro_custom_duration_button')),
   );
-  expect(
-    find.byKey(const ValueKey('pomodoro_duration_dial')),
-    findsOneWidget,
-  );
-  await review.capture('14-focus-duration-dial');
-  await review.tap(find.byKey(const ValueKey('pomodoro_duration_apply')));
+  expect(find.text('Tu tiempo de enfoque'), findsOneWidget);
+  await review.capture('14-focus-times-quick');
+  await review.backTo<PomodoroScreen>();
   await review.tap(
     find.byKey(const ValueKey('pomodoro_mode_cycle')),
   );
