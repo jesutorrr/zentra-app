@@ -203,7 +203,9 @@ comunicar selección. Los `showTimePicker`/`showDatePicker` perdieron su
 `colorScheme` override, que hacía llegar el mismo diálogo azul o naranja según
 una decisión anterior sin relación. La banda del encabezado quedó fija, y el
 token `salviaFormHeader` claro pasó de un melocotón que ya nadie pintaba a la
-familia teal (`0xFFDCEDE6`). El alcance fue deliberado: por decisión del usuario,
+familia teal (`0xFFDCEDE6`; más tarde ese mismo día, al teal sólido `0xFF00796B`
+—ver la sección de paridad de lanzadores más abajo). El alcance fue deliberado:
+por decisión del usuario,
 sólo el formulario. Las tarjetas, la lista y Hoy conservan color por categoría, y
 sus once llamadas a `getCategoryColor`/`getSalviaCategoryColor`/`getCategoryTint`
 quedaron intactas. Los días de la semana ya caben completos, domingo incluido.
@@ -245,6 +247,65 @@ sistema no reportaba ni un solo error de E/S, y el culpable era un `flutter driv
 del Screen Reviewer corriendo en paralelo desde otra sesión sobre este mismo
 repo. En cuanto terminó, el build pasó en 49.8 s sin cambiar nada. Antes de
 borrar DerivedData conviene correr `pgrep -fl "flutter_tools|xcodebuild"`.
+
+## «Nuevo hábito» y «Nuevo enfoque» abren con el mismo objeto, 5 de agosto de 2026
+
+El usuario pidió que las dos pantallas de creación se vieran hermanas, tomando
+«Se repite / Una sola vez» como referencia para «Rápido / Ciclo», y que la banda
+del encabezado pasara del `#DCEDE6` clarito al teal fuerte de los botones —**sólo
+en light**. Lo que salió no fue un parecido sino una pieza compartida.
+
+**Por qué compartida y no copiada.** Los dos selectores ya se habían parecido una
+vez y se habían separado en cuatro ejes a la vez: radio 999 contra 18, color del
+riel, `MainAxisSize.min` contra `Expanded`, y relleno `brandDeep` contra pastilla
+clara. Ninguna prueba lo vio porque cada pantalla se probaba sola y por separado
+las dos estaban bien; lo que estaba roto era la relación. `ZentraModeBand` y
+`ZentraModeSelector` viven ahora en `lib/presentation/widgets/mode_band.dart`, y
+`_HabitModeSelector`, `_HabitModeOption`, `_ModeSelector` y `_ModePill`
+desaparecieron. Un widget compartido no puede divergir.
+
+**El teal fuerte forzó dos decisiones que no se ven venir.** Medido sobre la banda
+`#00796B`: `ink` da 2.96:1 y `inkSecondary` 1.09:1, ambos por debajo de 4.5; el
+blanco da 5.32:1. Así que el contenido de la banda **se invierte a claro** en vez
+de heredar la tinta de la página. Y el riel **se oscurece** en vez de aclararse:
+blanco al 55% compone `#8CC3BC` sobre el teal y deja su propia etiqueta en
+1.97:1, mientras negro al 14% da `#00685C` y 6.70:1. El token oscuro
+(`#112E28`) no se tocó, y una prueba afirma que no se arrastre al teal claro.
+
+**La banda es el techo de la pantalla, no un rectángulo dentro de ella.** Con el
+inset del notch aplicado por fuera quedaba una franja crema encima del teal y la
+banda se leía despegada del borde. El `SafeArea` vive dentro del color: la banda
+arranca en 0 y el contenido baja. Una prueba lo fija con `padding.top = 47`, y
+mutar la estructura a la anterior falla con `Actual: <47.0>` en las dos pantallas.
+
+**Regresión propia, encontrada y cerrada.** Al subir el selector dentro de la
+banda, ésta creció una fila entera y en 320×568 costó 16 dp más de los que el
+lanzador tiene: rompió el `maxScrollExtent == 0` de la corrección 1. Los 16 dp
+salieron del aire de la banda misma cuando `layout.isShort`, no del portal, que es
+la parte a la que el usuario tiene que llegar.
+
+**Y un defecto que la captura delató.** El chip de duración seleccionado mostraba
+el número encimado por el palomeado. Parecía medio frame; medido con una sonda
+desechable, no lo era: el chip recibía 54.8 dp donde necesitaba 68, y la etiqueta
+del «25» salía a **0.0 dp de ancho** en 393 y 375. Dos causas. El palomeado
+ensancha el chip elegido y con cinco chips repartiéndose la fila no hay ancho
+donde ensancharse: `showCheckmark` pasó a `false` en todos los anchos —el relleno
+y la semántica ya dicen cuál está elegido, que era el razonamiento que ya existía
+por debajo de 360 dp. Y el relleno de etiqueta angosto dejó de depender del ancho
+del dispositivo: el aprieto es de la fila, no del teléfono, y atarlo a 360 dp
+hacía que los chips cambiaran de forma en un umbral invisible. Los dígitos ahora
+miden entre 14 y 28 dp en 430, 393, 375, 360 y 320.
+
+Herramientas nuevas: `tool/launcher_parity_lab.dart` monta las dos pantallas
+reales lado a lado sobre un contenedor de vista previa (`PARITY_DARK`,
+`PARITY_ONLY=habit|focus`) —los otros labs montan widgets render-only con un
+fixture, pero aquí la pregunta es de parangón y no se contesta mirando una pieza
+aislada— y `test/widget/launcher_parity_test.dart` compara las dos pantallas
+entre sí en vez de contra literales de color, así que sobrevive a un cambio de
+paleta en lugar de exigir una edición. Tres mutaciones más confirmaron dientes,
+con los mismos números medidos antes de escribir código: banda de vuelta a
+`#DCEDE6` → 3 fallos; riel de vuelta a blanco al 55% → 1.9758; título sin
+`color: onBand` → 2.9556.
 
 ## Corte activo: nube estacionada
 

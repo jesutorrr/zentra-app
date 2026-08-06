@@ -13,6 +13,7 @@ import 'pomodoro_history_screen.dart';
 import 'theme.dart';
 import 'utils/feedback_utils.dart';
 import 'widgets/ambient_background.dart';
+import 'widgets/mode_band.dart';
 import 'widgets/responsive_layout.dart';
 
 /// Portal de entrada y superficie inmersiva para el flujo de enfoque.
@@ -233,7 +234,10 @@ class _FocusLauncherState extends State<_FocusLauncher> {
     return KeyedSubtree(
       key: const ValueKey('pomodoro_launcher'),
       child: ZentraAmbientBackground(
+        // The band takes the top inset itself so its teal reaches the physical
+        // top edge; taking it here too would leave a cream strip above it.
         child: SafeArea(
+          top: false,
           child: ResponsiveLayoutBuilder(
             builder: (context, layout) {
               return CustomScrollView(
@@ -241,23 +245,48 @@ class _FocusLauncherState extends State<_FocusLauncher> {
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 slivers: [
-                  // History and settings stay against the top edge in their own
-                  // sliver so the portal below can claim the middle without
-                  // dragging them along.
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      layout.horizontalPagePadding,
-                      layout.verticalPagePadding,
-                      layout.horizontalPagePadding,
-                      0,
-                    ),
-                    sliver: SliverToBoxAdapter(
-                      child: ResponsiveContentFrame(
-                        maxWidth: 1040,
-                        child: _FocusTopBar(
-                          provider: widget.provider,
-                          controller: widget.controller,
-                          showSettings: true,
+                  // The band: navigation and the Rápido / Ciclo choice on one
+                  // strip, exactly as the habit form opens. It stays in its own
+                  // sliver against the top edge so the portal below can claim
+                  // the middle without dragging it along. Full-bleed, so the
+                  // page padding lives inside it rather than around it.
+                  SliverToBoxAdapter(
+                    child: ZentraModeBand(
+                      child: Padding(
+                        // The band grew by a whole row when the selector moved
+                        // into it, and on a 320x568 screen that row costs 16dp
+                        // more than the launcher has. It comes out of the band's
+                        // own air rather than out of the portal below, which is
+                        // the part the user has to reach.
+                        padding: EdgeInsets.fromLTRB(
+                          layout.horizontalPagePadding,
+                          layout.isShort
+                              ? context.spacing.xs
+                              : layout.verticalPagePadding,
+                          layout.horizontalPagePadding,
+                          layout.isShort
+                              ? context.spacing.xs
+                              : context.spacing.md,
+                        ),
+                        child: ResponsiveContentFrame(
+                          maxWidth: 1040,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _FocusTopBar(
+                                provider: widget.provider,
+                                controller: widget.controller,
+                                showSettings: true,
+                                foreground:
+                                    ZentraModeBand.foregroundOf(context),
+                              ),
+                              SizedBox(height: context.spacing.xs),
+                              _ModeSelector(
+                                provider: widget.provider,
+                                controller: widget.controller,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -484,34 +513,37 @@ class _PortalIntro extends StatelessWidget {
         : screen.width < 360
             ? theme.textTheme.headlineSmall
             : theme.textTheme.headlineMedium;
-    // Rhythm first, then the headline — the same order as the habit form, where
-    // "Se repite / Una sola vez" sits at the top before anything else. Picking
-    // Rápido or Ciclo is the decision that changes what the rest of the screen
-    // means, so it stops being something the user finds after reading.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ModeSelector(provider: provider, controller: controller),
-        SizedBox(height: short ? context.spacing.sm : context.spacing.lg),
-        // One line, and no subtitle under it. The old copy carried a hard line
-        // break and still wrapped: five lines at 393dp, 195dp of headline, which
-        // together with the subtitle pushed "Otro" and the naming button 135dp
-        // below the fold on the very screen where they are the two options
-        // worth discovering.
-        Text(
-          'Una sola cosa',
-          key: const ValueKey('focus_portal_headline'),
-          style: headline?.copyWith(
-            fontWeight: FontWeight.w500,
-            height: 1.08,
-            letterSpacing: -1.8,
-          ),
+    // Rápido / Ciclo used to sit here, first, because picking the rhythm is the
+    // decision that changes what the rest of the screen means. It still comes
+    // first — it just moved up into the band, which is where the habit form
+    // keeps the same choice.
+    //
+    // One line, and no subtitle under it. The old copy carried a hard line break
+    // and still wrapped: five lines at 393dp, 195dp of headline, which together
+    // with the subtitle pushed "Otro" and the naming button 135dp below the fold
+    // on the very screen where they are the two options worth discovering.
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Text(
+        'Una sola cosa',
+        key: const ValueKey('focus_portal_headline'),
+        style: headline?.copyWith(
+          fontWeight: FontWeight.w500,
+          height: 1.08,
+          letterSpacing: -1.8,
         ),
-      ],
+      ),
     );
   }
 }
 
+/// «Rápido / Ciclo», el mismo control que «Se repite / Una sola vez».
+///
+/// Antes era una copia con el mismo propósito y cuatro diferencias: pastilla de
+/// radio 999 contra 18, riel de otro color, mitades ajustadas a su etiqueta en
+/// vez de repartidas, y relleno `brandDeep` en vez de la pastilla clara. Ahora
+/// las dos pantallas construyen el mismo widget, así que no pueden volver a
+/// separarse.
 class _ModeSelector extends StatelessWidget {
   final PomodoroViewState provider;
   final PomodoroController controller;
@@ -523,90 +555,21 @@ class _ModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final stack = MediaQuery.textScalerOf(context).scale(1) >= 2;
-    final quick = _ModePill(
-      key: const ValueKey('pomodoro_mode_quick'),
-      label: 'Rápido',
-      selected: provider.isQuickMode,
-      onTap: () => controller.selectMode(PomodoroMode.quick),
-    );
-    final cycle = _ModePill(
-      key: const ValueKey('pomodoro_mode_cycle'),
-      label: 'Ciclo',
-      selected: provider.isCycleMode,
-      onTap: () => controller.selectMode(PomodoroMode.cycle),
-    );
-    return MediaQuery.withClampedTextScaling(
-      maxScaleFactor: 1.8,
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.58),
-          borderRadius: BorderRadius.circular(context.radii.pill),
+    return ZentraModeSelector(
+      options: [
+        ZentraModeOption(
+          key: const ValueKey('pomodoro_mode_quick'),
+          label: 'Rápido',
+          selected: provider.isQuickMode,
+          onTap: () => controller.selectMode(PomodoroMode.quick),
         ),
-        child: stack
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [quick, cycle],
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [quick, cycle],
-              ),
-      ),
-    );
-  }
-}
-
-class _ModePill extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ModePill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.zentraPalette;
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(context.radii.pill),
-        onTap: () {
-          triggerHaptic(HapticType.selection);
-          onTap();
-        },
-        child: AnimatedContainer(
-          duration: context.motionPolicy.duration(
-            const Duration(milliseconds: 180),
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: context.spacing.lg,
-            vertical: context.spacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: selected ? palette.brandDeep : Colors.transparent,
-            borderRadius: BorderRadius.circular(context.radii.pill),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: selected
-                      ? ZentraPalette.light.functionalSurface
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
+        ZentraModeOption(
+          key: const ValueKey('pomodoro_mode_cycle'),
+          label: 'Ciclo',
+          selected: provider.isCycleMode,
+          onTap: () => controller.selectMode(PomodoroMode.cycle),
         ),
-      ),
+      ],
     );
   }
 }
@@ -650,8 +613,13 @@ class _PortalConfiguration extends StatelessWidget {
     // VisualDensity.compact they came out 40dp tall, under the 48dp tap target,
     // which is not a trade worth making for one row of layout.
     final narrow = MediaQuery.sizeOf(context).width < 360;
-    final labelPadding =
-        narrow ? const EdgeInsets.symmetric(horizontal: 2) : null;
+    // Tight at every width, not only below 360dp. Five chips sharing one row
+    // never get their intrinsic width — not even on a 430dp screen — so the
+    // default 20dp of air per side comes out of the label instead: measured, the
+    // digits fell to 9.3dp at 360 and 0dp at 393 once selected. Keying this to a
+    // device width was a guess about the phone when the squeeze belongs to the
+    // row, and it made the chips change shape at an invisible threshold.
+    const labelPadding = EdgeInsets.symmetric(horizontal: 2);
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.8,
       child: Column(
@@ -741,10 +709,14 @@ class _DurationPresets extends StatelessWidget {
           label: Text('$preset', textAlign: TextAlign.center),
           selected: selected == preset,
           labelPadding: labelPadding,
-          // The checkmark widens whichever chip is selected, so the row would
-          // shift sideways as the user tried durations. The fill already says
-          // which one is chosen, and so does its selected semantics.
-          showCheckmark: !narrow,
+          // No checkmark at any width. It widens whichever chip is selected,
+          // and once the five chips share the row equally there is no width to
+          // widen into: the label got squeezed to 0dp and the digits came out
+          // under the tick. This was already the reasoning below 360dp — the
+          // fill says which one is chosen, and so does its selected semantics —
+          // and the only thing the wider screens did differently was have
+          // enough room to hide the defect from a 320dp test.
+          showCheckmark: false,
           onSelected: (_) {
             triggerHaptic(HapticType.selection);
             onSelect(preset);

@@ -139,10 +139,12 @@ class ZentraPalette extends ThemeExtension<ZentraPalette> {
     various: Color(0xFF546E7A),
     functionalSurface: Color(0xFFFFFEFB),
     specialSurface: Color(0xFFFFF0EC),
-    // Teal family, like the dark counterpart below: the habit form now carries a
-    // single accent instead of one per category, so its header band no longer
-    // shifts hue with the chosen category. It was a peach that nothing painted.
-    salviaFormHeader: Color(0xFFDCEDE6),
+    // The same teal as `brandTeal` and the save button, not a tint of it. The
+    // band used to be a pale #DCEDE6 that read as almost-white and left the top
+    // of the creation screens without a voice. Solid, it says the brand once and
+    // stops — which is why everything sitting on it inverts to light: see
+    // ZentraModeBand for the ratios that force that.
+    salviaFormHeader: Color(0xFF00796B),
   );
 
   static const dark = ZentraPalette(

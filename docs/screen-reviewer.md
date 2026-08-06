@@ -100,6 +100,15 @@ guardar— en lugar de uno por categoría, así que estas capturas sirven para
 confirmar que ni la banda del encabezado ni los selectores cambian de color al
 probar categorías.
 
+Ese mismo día la banda pasó al teal sólido `#00796B` en light y su contenido se
+invirtió a blanco, y «Se repite / Una sola vez» dejó de ser código propio de esta
+pantalla: es `ZentraModeSelector`, el mismo widget que pinta «Rápido / Ciclo» en
+Enfoque. Dos cosas que sólo se ven en la captura y no en una prueba de ratio: que
+la banda **toque el borde superior** —el inset del notch se toma dentro del color,
+y aplicado por fuera dejaba una franja crema que hacía leer la banda como un
+rectángulo flotando— y que la banda de esta pantalla y la de Enfoque se vean
+hermanas. El cotejo lado a lado tiene su propia herramienta, más abajo.
+
 Para revisar la biblioteca de Notas y la superficie única de nota:
 
 ```bash
@@ -138,6 +147,31 @@ físico.
 
 Los scopes disponibles viven en `tool/run_screen_reviewer.dart`. La matriz
 completa se reserva para cerrar un bloque de pantallas o preparar un release.
+
+## Cotejar «Nuevo hábito» contra «Nuevo enfoque»
+
+El Reviewer recorre una pantalla a la vez, y hay preguntas que eso no contesta:
+si dos pantallas se ven hermanas no se sabe mirando una. `launcher_parity_lab`
+monta las dos **pantallas reales** —no maquetas— lado a lado sobre un contenedor
+de vista previa:
+
+```bash
+flutter run -t tool/launcher_parity_lab.dart \
+  -d AD73667E-15C3-48D3-B1C7-B7B45C808754
+```
+
+`--dart-define=PARITY_DARK=true` para AMOLED y
+`--dart-define=PARITY_ONLY=habit|focus` para una sola pantalla a tamaño completo,
+que es lo que hay que usar en un teléfono: dos pantallas de verdad aplastadas a
+196 dp de ancho enseñan defectos que no existen. Por debajo de 720 dp el lab se
+apila en pestañas por esa misma razón.
+
+Lo que el lab ve y una prueba no: que la banda llegue al borde, y que el chip de
+duración seleccionado en Enfoque muestre su número. Ese segundo defecto —el
+palomeado encimado sobre el «25»— salió en una captura, se confundió con un
+frame a medias y sólo la medición lo desmintió: la etiqueta valía 0.0 dp de
+ancho. Lo estructural sí está en prueba: `test/widget/launcher_parity_test.dart`
+compara las dos pantallas entre sí, no contra literales de color.
 
 Los artefactos quedan bajo `build/screen-review/<timestamp>/`. Cada corrida
 incluye `report.md` y una carpeta de capturas por dispositivo.

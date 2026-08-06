@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -373,13 +374,37 @@ void main() {
 
   AnimatedContainer headerContainer(WidgetTester tester) {
     return tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('habit-form-header')),
+      find.descendant(
+        of: find.byKey(const ValueKey('habit-form-header')),
+        matching: find.byKey(const ValueKey('zentra-mode-band')),
+      ),
     );
   }
 
   Color headerColor(WidgetTester tester) {
     final header = headerContainer(tester);
     return (header.decoration! as BoxDecoration).color!;
+  }
+
+  /// The colour actually painted for a glyph run, inherited styles included.
+  /// Reading `Text.style?.color` instead would report `null` for anything that
+  /// takes its colour from the theme — and a null read looks like a pass.
+  Color paintedColor(WidgetTester tester, Finder finder) {
+    return tester.renderObject<RenderParagraph>(finder).text.style!.color!;
+  }
+
+  /// The mode pill's fill flattened against the band behind it, for the same
+  /// reason as [categoryFillColor]: the pill may paint a translucent colour, and
+  /// what the eye reads is the composite.
+  Color modeOptionFill(WidgetTester tester, String key) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(ValueKey(key)),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final fill = (container.decoration! as BoxDecoration).color!;
+    return Color.alphaBlend(fill, headerColor(tester));
   }
 
   BoxDecoration categoryDecoration(WidgetTester tester, Category category) {
@@ -668,7 +693,7 @@ void main() {
     final semantics = tester.ensureSemantics();
 
     expect(
-      find.byKey(const ValueKey('habit-mode-selector')),
+      find.byKey(const ValueKey('zentra-mode-selector')),
       findsOneWidget,
     );
     expect(isSelected(tester, 'habit-mode-one-time'), isTrue);
@@ -917,10 +942,75 @@ void main() {
     await tapKey(tester, 'habit-category-movimiento');
 
     expect(headerColor(tester), initialColor);
-    // The header carries the title and the Se repite / Una sola vez selector.
+  });
+
+  testWidgets('the light header band is solid brand teal', (tester) async {
+    await pumpForm(tester);
+
+    // The band used to be a pale tint (#DCEDE6). It is now the same teal as the
+    // save button, which makes it the strongest surface on the screen — and that
+    // is the point: the top of the form states the brand once, loudly.
+    expect(headerColor(tester), ZentraPalette.light.brandTeal);
+  });
+
+  testWidgets('light header content is legible on the teal band',
+      (tester) async {
+    await pumpForm(tester);
+    final band = headerColor(tester);
+
+    // Ink measures 2.96:1 on this teal and inkSecondary 1.09:1, so the band
+    // cannot carry dark content: everything on it has to invert to light. These
+    // are the numbers that force the inversion, not a preference.
+    expect(_contrastRatio(ZentraPalette.light.ink, band), lessThan(4.5));
+
     expect(
-      _contrastRatio(ZentraPalette.light.ink, initialColor),
+      _contrastRatio(paintedColor(tester, find.text('Nuevo hábito')), band),
       greaterThanOrEqualTo(4.5),
+      reason: 'El título del formulario se pierde sobre la banda teal.',
+    );
+
+    final back = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const ValueKey('habit-back')),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(
+      _contrastRatio(back.color!, band),
+      greaterThanOrEqualTo(3.0),
+      reason: 'La flecha de atrás se pierde sobre la banda teal.',
+    );
+  });
+
+  testWidgets('the light mode selector reads on the teal band', (tester) async {
+    await pumpForm(tester);
+    final band = headerColor(tester);
+
+    final rail = tester.widget<Material>(
+      find.byKey(const ValueKey('zentra-mode-selector')),
+    );
+    final railColor = Color.alphaBlend(rail.color!, band);
+
+    // The rail used to be white at 55%, which over teal composites to #8CC3BC
+    // and leaves white text at 1.97:1 — unreadable. Darkening the rail instead
+    // of lightening it is what keeps the inactive label legible.
+    expect(
+      _contrastRatio(paintedColor(tester, find.text('Una sola vez')), railColor),
+      greaterThanOrEqualTo(4.5),
+      reason: 'La opción inactiva se pierde en el riel.',
+    );
+
+    // The selected pill stays light so it reads as a raised chip on the band.
+    final selectedFill = modeOptionFill(tester, 'habit-mode-recurring');
+    expect(
+      _contrastRatio(selectedFill, band),
+      greaterThanOrEqualTo(3.0),
+      reason: 'La pastilla activa no se distingue de la banda.',
+    );
+    expect(
+      _contrastRatio(paintedColor(tester, find.text('Se repite')), selectedFill),
+      greaterThanOrEqualTo(4.5),
+      reason: 'El texto activo se pierde en su pastilla.',
     );
   });
 

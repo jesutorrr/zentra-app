@@ -14,6 +14,7 @@ import 'motion_policy.dart';
 import 'theme.dart';
 import 'utils/dialogs.dart';
 import 'utils/feedback_utils.dart';
+import 'widgets/mode_band.dart';
 
 const Map<Category, List<String>> _categorySuggestions = {
   Category.agua: [
@@ -545,7 +546,10 @@ class _HabitFormScreenState extends ConsumerState<HabitFormScreen> {
     return Scaffold(
       key: const ValueKey('habit-form-screen'),
       backgroundColor: theme.colorScheme.surface,
+      // No top inset here: the band takes it internally so its teal reaches the
+      // physical top edge instead of starting below the notch.
       body: SafeArea(
+        top: false,
         bottom: false,
         child: Column(
           children: [
@@ -688,15 +692,12 @@ class _HabitFormHeader extends StatelessWidget {
     // Fixed in both modes. The light band used to be the category tint, so the
     // top of the screen changed colour every time the user tried a category —
     // the loudest surface in the form reacting to the smallest decision in it.
-    final backgroundColor = context.zentraPalette.salviaFormHeader;
+    // Now it is the solid brand teal, shared with the Focus launcher: the band
+    // and its selector are one widget, so the two screens cannot drift apart.
+    final onBand = ZentraModeBand.foregroundOf(context);
 
-    return AnimatedContainer(
+    return ZentraModeBand(
       key: const ValueKey('habit-form-header'),
-      duration: context.motionPolicy.duration(
-        const Duration(milliseconds: 240),
-      ),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(color: backgroundColor),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           horizontalPadding,
@@ -719,7 +720,10 @@ class _HabitFormHeader extends StatelessWidget {
                         key: const ValueKey('habit-back'),
                         tooltip: 'Atrás',
                         onPressed: onBack,
-                        icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                        icon: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: onBand,
+                        ),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
@@ -730,6 +734,7 @@ class _HabitFormHeader extends StatelessWidget {
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.4,
+                            color: onBand,
                           ),
                         ),
                       ),
@@ -763,13 +768,14 @@ class _HabitFormHeader extends StatelessWidget {
                             ),
                           ],
                           icon: isDeleting
-                              ? const SizedBox.square(
+                              ? SizedBox.square(
                                   dimension: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
+                                    color: onBand,
                                   ),
                                 )
-                              : const Icon(Icons.more_horiz_rounded),
+                              : Icon(Icons.more_horiz_rounded, color: onBand),
                         )
                       else
                         const SizedBox(width: 48),
@@ -777,115 +783,23 @@ class _HabitFormHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _HabitModeSelector(
-                  selected: mode,
-                  onSelected: onModeSelected,
+                ZentraModeSelector(
+                  options: [
+                    ZentraModeOption(
+                      key: const ValueKey('habit-mode-recurring'),
+                      label: 'Se repite',
+                      selected: mode == _HabitMode.recurring,
+                      onTap: () => onModeSelected(_HabitMode.recurring),
+                    ),
+                    ZentraModeOption(
+                      key: const ValueKey('habit-mode-one-time'),
+                      label: 'Una sola vez',
+                      selected: mode == _HabitMode.oneTime,
+                      onTap: () => onModeSelected(_HabitMode.oneTime),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HabitModeSelector extends StatelessWidget {
-  final _HabitMode selected;
-  final ValueChanged<_HabitMode> onSelected;
-
-  const _HabitModeSelector({
-    required this.selected,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      key: const ValueKey('habit-mode-selector'),
-      color: isDark
-          ? Colors.black.withValues(alpha: 0.42)
-          : Colors.white.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(context.radii.medium),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            Expanded(
-              child: _HabitModeOption(
-                key: const ValueKey('habit-mode-recurring'),
-                label: 'Se repite',
-                selected: selected == _HabitMode.recurring,
-                onTap: () => onSelected(_HabitMode.recurring),
-              ),
-            ),
-            Expanded(
-              child: _HabitModeOption(
-                key: const ValueKey('habit-mode-one-time'),
-                label: 'Una sola vez',
-                selected: selected == _HabitMode.oneTime,
-                onTap: () => onSelected(_HabitMode.oneTime),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HabitModeOption extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _HabitModeOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(context.radii.medium - 4),
-          child: AnimatedContainer(
-            duration: context.motionPolicy.duration(
-              const Duration(milliseconds: 240),
-            ),
-            constraints: const BoxConstraints(minHeight: 48),
-            alignment: Alignment.center,
-            padding: EdgeInsets.symmetric(horizontal: context.spacing.sm),
-            decoration: BoxDecoration(
-              color: selected
-                  ? isDark
-                      ? context.zentraPalette.tealSoft
-                      : context.zentraPalette.surfaceCard
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(context.radii.medium - 4),
-            ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: selected && isDark
-                    ? Colors.black
-                    : selected
-                        ? theme.colorScheme.onSurface
-                        : theme.colorScheme.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
             ),
           ),
         ),

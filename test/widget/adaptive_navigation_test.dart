@@ -590,6 +590,33 @@ void main() {
         );
       }
 
+      // Y la duración elegida se sigue leyendo. Caber en una fila no vale nada
+      // si el chip seleccionado se queda sin espacio para su propio número: el
+      // palomeado se lo comía y el «25» salía a 0dp de ancho, con el número
+      // encimado por el check.
+      for (final preset in const <int>[5, 15, 25, 45]) {
+        final finder = find.byKey(ValueKey('pomodoro_duration_$preset'));
+        final chip = tester.getRect(finder);
+        final digits = tester.getRect(
+          find.descendant(of: finder, matching: find.text('$preset')),
+        );
+        expect(
+          digits.width,
+          greaterThanOrEqualTo(10),
+          reason: '$label: el chip de $preset aplastó su propio número.',
+        );
+        expect(
+          digits.left,
+          greaterThanOrEqualTo(chip.left - 0.5),
+          reason: '$label: el número de $preset se sale del chip.',
+        );
+        expect(
+          digits.right,
+          lessThanOrEqualTo(chip.right + 0.5),
+          reason: '$label: el número de $preset se sale del chip.',
+        );
+      }
+
       // All five presets on one row: a second row is what pushed the naming
       // button off the bottom, and it stranded "Otro" where nobody looks.
       final presetTop = tester.getRect(
